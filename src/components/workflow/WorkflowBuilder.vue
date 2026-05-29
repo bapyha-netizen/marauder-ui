@@ -1,0 +1,343 @@
+<template>
+  <div class="h-full flex flex-col">
+    <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Scenarios</h2>
+
+    <div class="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div v-for="wf in workflows" :key="wf.id"
+          class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4 cursor-pointer hover:bg-slate-700/50 hover:border-slate-600/50 transition-all"
+          @click="openWorkflow(wf)">
+          <div class="flex items-start space-x-3">
+            <span class="text-xl mt-0.5">{{ wf.icon || '📋' }}</span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center space-x-2">
+                <h3 class="text-sm font-semibold text-slate-200">{{ wf.name }}</h3>
+                <span v-if="wf.warning" class="badge-amber text-[9px]">⚠ attack</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{{ wf.ru }}</p>
+              <div class="mt-2 flex flex-wrap gap-1">
+                <span v-for="(step, i) in wf.steps" :key="i" class="tag text-[9px]">
+                  {{ step.command.split(' ')[0] }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <Teleport to="body">
+      <div v-if="selectedWorkflow" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
+        @click.self="aborted && closeWorkflow()">
+        <div class="bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
+          <!-- Header -->
+          <div class="flex justify-between items-center mb-4">
+            <div class="flex items-center space-x-3">
+              <span class="text-2xl">{{ selectedWorkflow.icon || '📋' }}</span>
+              <div>
+                <h2 class="text-lg font-bold text-slate-100">{{ selectedWorkflow.name }}</h2>
+                <p class="text-xs text-slate-400 mt-0.5">{{ selectedWorkflow.ru }}</p>
+              </div>
+            </div>
+            <button @click="closeWorkflow" class="btn-ghost btn-icon text-lg hover:bg-slate-700/50 rounded-lg p-1.5">✕</button>
+          </div>
+
+          <!-- Steps + Log -->
+          <div class="flex-1 overflow-y-auto min-h-0 space-y-3 mb-5 scrollbar-thin pr-1">
+            <!-- Step indicators -->
+            <div v-for="(step, i) in selectedWorkflow.steps" :key="i"
+              class="flex items-start space-x-3 p-3 rounded-xl border transition-colors"
+              :class="stepStatusClass(i)">
+              <div class="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold"
+                :class="stepStatusDotClass(i)">
+                {{ stepStatusIcon(i) }}
+              </div>
+              <div class="flex-1 space-y-1.5">
+                <p class="text-xs font-medium" :class="stepStatusTextClass(i)">{{ step.desc || step.command }}</p>
+                <div class="text-[11px] font-mono text-slate-500 bg-slate-800/50 px-2 py-1 rounded">{{ step.command }}</div>
+                <div v-if="step.requiresInput && !isRunning" class="space-y-1">
+                  <label class="text-[11px] text-slate-400">{{ step.label }}</label>
+                  <input v-model="stepInputs[i]" :placeholder="step.placeholder" class="input text-xs">
+                </div>
+                <div v-if="stepOutputs[i]" class="text-[11px] text-slate-400 bg-slate-900/50 px-2 py-1 rounded border-l-2 border-indigo-500/50 mt-1">
+                  {{ stepOutputs[i] }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Execution log -->
+            <div v-if="execLog.length" class="bg-slate-900/50 rounded-xl border border-slate-700/50 p-3">
+              <h4 class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Execution Log</h4>
+              <div class="space-y-1 max-h-40 overflow-y-auto scrollbar-thin">
+                <div v-for="(entry, i) in execLog" :key="i" class="flex items-start space-x-2 text-[11px] font-mono">
+                  <span class="text-slate-600 flex-shrink-0 w-14">{{ entry.time }}</span>
+                  <span :class="entry.color" class="flex-shrink-0 w-4">{{ entry.icon }}</span>
+                  <span class="text-slate-400">{{ entry.msg }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Summary -->
+            <div v-if="completed" class="bg-emerald-500/10 border border-emerald-700/30 rounded-xl p-4">
+              <div class="flex items-center space-x-2 mb-3">
+                <span class="text-emerald-400 text-lg">✓</span>
+                <span class="text-sm font-semibold text-emerald-300">Completed — {{ duration }}</span>
+              </div>
+              <div class="grid grid-cols-3 gap-2 text-center">
+                <div @click="goToTab('ap')" class="bg-slate-900/50 rounded-lg p-2 cursor-pointer hover:bg-slate-800/50 transition-colors">
+                  <div class="text-lg font-bold text-indigo-400">{{ results.aps }}</div>
+                  <div class="text-[10px] text-slate-500">APs found →</div>
+                </div>
+                <div @click="goToTab('ap')" class="bg-slate-900/50 rounded-lg p-2 cursor-pointer hover:bg-slate-800/50 transition-colors">
+                  <div class="text-lg font-bold text-cyan-400">{{ results.stations }}</div>
+                  <div class="text-[10px] text-slate-500">Stations →</div>
+                </div>
+                <div @click="goToTab('ble')" class="bg-slate-900/50 rounded-lg p-2 cursor-pointer hover:bg-slate-800/50 transition-colors">
+                  <div class="text-lg font-bold text-emerald-400">{{ results.ble }}</div>
+                  <div class="text-[10px] text-slate-500">BLE devices →</div>
+                </div>
+              </div>
+              <div v-if="results.packets" class="mt-2 bg-slate-900/50 rounded-lg p-2 text-center">
+                <span class="text-xs font-bold text-amber-400">{{ results.packets }}</span>
+                <span class="text-[10px] text-slate-500 ml-1">packets captured</span>
+              </div>
+              <div class="mt-2 text-center">
+                <button @click="goToTab('dashboard')" class="btn-ghost btn-sm text-[10px]">View in Dashboard →</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="flex items-center justify-between pt-4 border-t border-slate-700/50">
+            <div v-if="selectedWorkflow.warning" class="text-[11px] text-amber-400 font-medium">
+              ⚠ Use only on authorized networks
+            </div>
+            <div class="flex space-x-3 ml-auto">
+              <button @click="closeWorkflow" class="btn-ghost">{{ completed || aborted ? 'Close' : 'Stop' }}</button>
+              <button v-if="!isRunning && !completed" @click="executeWorkflow" class="btn-primary">Execute</button>
+              <button v-if="completed" @click="closeWorkflow" class="btn-primary">Done</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed } from 'vue'
+import { useSerialStore } from '../../stores/serialStore'
+import { useApStore } from '../../stores/apStore'
+import { useBleStore } from '../../stores/bleStore'
+import { useDashboardStore } from '../../stores/dashboardStore'
+import { WORKFLOWS } from '../../services/commandRegistry'
+
+const emit = defineEmits(['navigate'])
+
+const serialStore = useSerialStore()
+const apStore = useApStore()
+const bleStore = useBleStore()
+const dashStore = useDashboardStore()
+const workflows = WORKFLOWS
+const selectedWorkflow = ref(null)
+const stepInputs = ref({})
+const stepOutputs = ref({})
+const isRunning = ref(false)
+const completed = ref(false)
+const aborted = ref(false)
+const currentStep = ref(-1)
+const execLog = ref([])
+const startTime = ref(null)
+const beforeSnapshot = ref(null)
+
+const addLog = (msg, icon = '•', color = 'text-slate-400') => {
+  const t = new Date()
+  execLog.value = [...execLog.value, {
+    time: `${t.getHours().toString().padStart(2, '0')}:${t.getMinutes().toString().padStart(2, '0')}:${t.getSeconds().toString().padStart(2, '0')}`,
+    msg, icon, color
+  }]
+}
+
+const duration = computed(() => {
+  if (!startTime.value) return ''
+  const diff = Date.now() - startTime.value
+  const m = Math.floor(diff / 60000)
+  const s = Math.floor((diff % 60000) / 1000)
+  return m > 0 ? `${m}m ${s}s` : `${s}s`
+})
+
+const stepStatusClass = (i) => {
+  if (completed.value) return 'bg-emerald-500/10 border-emerald-700/30'
+  if (i < currentStep.value) return 'bg-emerald-500/10 border-emerald-700/30'
+  if (i === currentStep.value && isRunning.value) return 'bg-indigo-500/10 border-indigo-700/30'
+  if (i === currentStep.value && aborted.value) return 'bg-red-500/10 border-red-700/30'
+  return 'bg-slate-700/30 border-slate-700/50'
+}
+
+const stepStatusDotClass = (i) => {
+  if (completed.value) return 'bg-emerald-500/20 text-emerald-300'
+  if (i < currentStep.value) return 'bg-emerald-500/20 text-emerald-300'
+  if (i === currentStep.value && isRunning.value) return 'bg-indigo-500/20 text-indigo-300'
+  if (i === currentStep.value && aborted.value) return 'bg-red-500/20 text-red-300'
+  return 'bg-slate-700/50 text-slate-400'
+}
+
+const stepStatusIcon = (i) => {
+  if (completed.value) return '✓'
+  if (i < currentStep.value) return '✓'
+  if (i === currentStep.value && isRunning.value) return '◉'
+  if (i === currentStep.value && aborted.value) return '✕'
+  return i + 1
+}
+
+const stepStatusTextClass = (i) => {
+  if (completed.value) return 'text-emerald-300'
+  if (i < currentStep.value) return 'text-emerald-300'
+  if (i === currentStep.value && isRunning.value) return 'text-indigo-300'
+  if (i === currentStep.value && aborted.value) return 'text-red-300'
+  return 'text-slate-300'
+}
+
+const results = computed(() => {
+  if (!beforeSnapshot.value || !completed.value) return { aps: 0, stations: 0, ble: 0, packets: 0 }
+  return {
+    aps: apStore.apCount - beforeSnapshot.value.aps,
+    stations: apStore.totalStations - beforeSnapshot.value.stations,
+    ble: bleStore.deviceCount - beforeSnapshot.value.ble,
+    packets: dashStore.packetsCaptured - beforeSnapshot.value.packets
+  }
+})
+
+const openWorkflow = (wf) => {
+  selectedWorkflow.value = wf
+  stepInputs.value = {}
+  stepOutputs.value = {}
+  isRunning.value = false
+  completed.value = false
+  aborted.value = false
+  currentStep.value = -1
+  execLog.value = []
+  startTime.value = null
+  beforeSnapshot.value = null
+}
+
+const closeWorkflow = () => {
+  aborted.value = true
+  isRunning.value = false
+  selectedWorkflow.value = null
+}
+
+const goToTab = (tab) => {
+  closeWorkflow()
+  emit('navigate', tab)
+}
+
+const executeWorkflow = async () => {
+  const wf = selectedWorkflow.value
+  if (!wf) return
+  isRunning.value = true
+  completed.value = false
+  aborted.value = false
+  currentStep.value = 0
+  startTime.value = Date.now()
+  execLog.value = []
+  beforeSnapshot.value = {
+    aps: apStore.apCount,
+    stations: apStore.totalStations,
+    ble: bleStore.deviceCount,
+    packets: dashStore.packetsCaptured
+  }
+
+  addLog(`Starting "${wf.name}" — ${wf.steps.length} steps`, '▶', 'text-cyan-400')
+
+  const hasForEachAP = wf.steps.some(s => s.forEachAP)
+  if (hasForEachAP) {
+    apStore.clearAPs()
+    addLog(`Cleared AP list for fresh scan`, '•', 'text-slate-500')
+  }
+
+  for (let i = 0; i < wf.steps.length; i++) {
+    if (aborted.value) {
+      addLog(`Aborted at step ${i + 1}`, '✕', 'text-red-400')
+      break
+    }
+    currentStep.value = i
+    const step = wf.steps[i]
+    let cmd = step.command
+    addLog(`Step ${i + 1}: ${step.desc}`, '→', 'text-indigo-400')
+
+    if (step.forEachAP) {
+      const aps = apStore.sortedAPs
+      const seen = new Set()
+      const indices = []
+      for (const ap of aps) {
+        const idx = ap.index
+        if (idx !== undefined && idx !== null && !seen.has(idx)) {
+          seen.add(idx)
+          indices.push(idx)
+        }
+      }
+      indices.sort((a, b) => a - b)
+      if (!indices.length) {
+        addLog(`No APs in list, skipping`, '◷', 'text-amber-400')
+        continue
+      }
+      addLog(`Running for ${indices.length} APs`, '→', 'text-indigo-400')
+      for (const idx of indices) {
+        if (aborted.value) break
+        const subCmd = cmd.replace('{idx}', idx)
+        await serialStore.sendAndWait(subCmd, 5000)
+        dashStore.incrementCommands()
+        addLog(`[${idx}]: ${subCmd}`, '⚡', 'text-yellow-400')
+      }
+      addLog(`Done`, '✓', 'text-emerald-400')
+      continue
+    }
+
+    if (step.requiresInput) {
+      const input = stepInputs.value[i]
+      if (!input) {
+        addLog(`Waiting for input: ${step.label}`, '◷', 'text-amber-400')
+        while (!stepInputs.value[i] && !aborted.value) {
+          await new Promise(r => setTimeout(r, 100))
+        }
+        if (aborted.value) break
+      }
+      const rawInput = stepInputs.value[i] || ''
+
+      if (step.splitInput) {
+        const items = rawInput.split(',').map(s => s.trim()).filter(Boolean)
+        addLog(`Input: ${items.length} values`, '✓', 'text-emerald-400')
+        for (const item of items) {
+          if (aborted.value) break
+          const subCmd = cmd.replace('{input}', item)
+          await serialStore.sendAndWait(subCmd, 5000)
+          dashStore.incrementCommands()
+          addLog(`Sent: ${subCmd}`, '⚡', 'text-yellow-400')
+        }
+        continue
+      }
+
+      cmd = cmd.replace('{input}', rawInput)
+      addLog(`Input received: ${rawInput}`, '✓', 'text-emerald-400')
+    }
+
+    await serialStore.sendAndWait(cmd, step.delay ? step.delay + 5000 : 15000)
+    dashStore.incrementCommands()
+    addLog(`Sent: ${cmd}`, '⚡', 'text-yellow-400')
+    addLog(`Done`, '✓', 'text-emerald-400')
+  }
+
+  await serialStore.sendAndWait('stopscan', 5000)
+  addLog('Sent: stopscan (cleanup)', '⏹', 'text-slate-400')
+
+  if (!aborted.value) {
+    completed.value = true
+    addLog(`Completed ${wf.steps.length} steps in ${duration.value}`, '✓', 'text-emerald-400')
+  } else {
+    addLog(`Stopped`, '✕', 'text-red-400')
+  }
+  isRunning.value = false
+  currentStep.value = -1
+}
+</script>

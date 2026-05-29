@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-900 text-slate-100 antialiased;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply bg-slate-800/80 backdrop-blur-sm rounded-xl border border-slate-700/50 shadow-lg;
+  }
+  .panel-header {
+    @apply text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium rounded-lg
+           transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800;
+  }
+  .btn-primary {
+    @apply btn bg-indigo-600 text-white hover:bg-indigo-500 focus:ring-indigo-500;
+  }
+  .btn-success {
+    @apply btn bg-emerald-600 text-white hover:bg-emerald-500 focus:ring-emerald-500;
+  }
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-500 focus:ring-red-500;
+  }
+  .btn-warning {
+    @apply btn bg-amber-600 text-white hover:bg-amber-500 focus:ring-amber-500;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-slate-300 hover:bg-slate-700/50;
+  }
+  .btn-emergency {
+    @apply btn bg-red-700 text-white hover:bg-red-600 focus:ring-red-500 shadow-lg shadow-red-900/50;
+  }
+  .btn-sm {
+    @apply px-2 py-1 text-[11px];
+  }
+  .btn-icon {
+    @apply p-1.5;
+  }
+  .input {
+    @apply w-full px-3 py-1.5 text-sm bg-slate-800 rounded-lg border border-slate-600
+           text-slate-100 placeholder-slate-500
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
+           transition-colors;
+  }
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full;
+  }
+  .badge-blue {
+    @apply badge bg-indigo-500/20 text-indigo-300;
+  }
+  .badge-green {
+    @apply badge bg-emerald-500/20 text-emerald-300;
+  }
+  .badge-red {
+    @apply badge bg-red-500/20 text-red-300;
+  }
+  .badge-amber {
+    @apply badge bg-amber-500/20 text-amber-300;
+  }
+  .tag {
+    @apply inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono rounded
+           bg-slate-700 text-slate-300;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #475569 transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #475569;
+    border-radius: 999px;
+  }
+}
