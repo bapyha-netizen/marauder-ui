@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { useApStore } from './apStore'
+import { parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil } from '../services/parserEngine'
 
 export const useSerialStore = defineStore('serial', () => {
   const port = ref(null)
@@ -134,12 +136,14 @@ export const useSerialStore = defineStore('serial', () => {
 
   const sendCommand = async (command) => {
     if (!command) return
-    if (command === 'clearlist -a' || command === 'clearlist -c') {
-      const { useApStore } = await import('../stores/apStore')
+    if (command === 'clearlist -a') {
+      useApStore().clearAPs()
+    } else if (command === 'clearlist -c') {
       useApStore().clearSelected()
     }
     if (isDemoMode.value) {
       addToTerminal(`> ${command}`, 'command')
+      _simulateDemoCommand(command)
       return
     }
     if (!port.value) {
@@ -163,18 +167,55 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  const _simulateDemoCommand = (command) => {
+    const genMAC = () => Array.from({length:6},()=>Math.floor(Math.random()*256).toString(16).padStart(2,'0')).join(':').toUpperCase()
+    const genRSSI = () => -(Math.floor(Math.random()*40)+40)
+    const genCH = () => Math.floor(Math.random()*13)+1
+
+    if (['scanall','sniffbeacon','list'].some(s => command.startsWith(s))) {
+      parseDemoAP()
+      for (let i = 0; i < 5; i++) {
+        addToTerminal(`${genRSSI()} Ch: ${genCH()} ${genMAC()} ESSID: DemoNet-${Math.floor(Math.random()*9999)}`, 'data')
+      }
+    }
+    if (command.startsWith('sniffbt') || command.startsWith('blespam')) {
+      parseDemoBLE()
+      for (let i = 0; i < 3; i++) {
+        addToTerminal(`${genRSSI()} Device: ${['iPhone','AirPods','Samsung Galaxy','Fitbit'][Math.floor(Math.random()*4)]}`, 'data')
+      }
+    }
+    if (command.startsWith('sniffdeauth')) {
+      parseDemoPacketCounts()
+      for (let i = 0; i < 3; i++) {
+        addToTerminal(`${genRSSI()} Ch: ${genCH()} ${genMAC()} -> ${genMAC()}`, 'data')
+      }
+    }
+    if (command.startsWith('sniffprobe') || command.startsWith('list -p')) {
+      for (let i = 0; i < 3; i++) {
+        addToTerminal(`${genRSSI()} Ch: ${genCH()} Client: ${genMAC()} Requesting: DemoWiFi-${Math.floor(Math.random()*999)}`, 'data')
+      }
+    }
+    if (command.startsWith('packetcount')) { parseDemoPacketCounts() }
+    if (command.startsWith('channelanalyzer')) { parseDemoChannelUtil() }
+    if (command.startsWith('stopscan')) { addToTerminal('Scanning stopped', 'system') }
+    if (command.startsWith('clearlist')) {
+      addToTerminal('List cleared', 'system')
+      if (command.includes('-a')) useApStore().clearAPs()
+    }
+  }
+
   const PROMPT_RE = /^>\s*$|^esp32marauder>\s*$/i
 
   const sendAndWait = (command, timeout = 15000) => {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       if (isDemoMode.value || !port.value) {
         sendCommand(command)
-        setTimeout(resolve, 500)
+        setTimeout(resolve, Math.min(timeout, 500))
         return
       }
       const echo = `> ${command}`
       const unsub = onLine((line) => {
-        if (line.startsWith('> ') && line !== echo && PROMPT_RE.test(line)) {
+        if (line !== echo && PROMPT_RE.test(line)) {
           unsub()
           clearTimeout(timer)
           resolve()
@@ -183,6 +224,7 @@ export const useSerialStore = defineStore('serial', () => {
       sendCommand(command)
       const timer = setTimeout(() => {
         unsub()
+        addToTerminal(`Timed out waiting for prompt after: ${command}`, 'warning')
         resolve()
       }, timeout)
     })
@@ -191,10 +233,9 @@ export const useSerialStore = defineStore('serial', () => {
   const sendSequence = async (steps) => {
     for (const step of steps) {
       if (typeof step === 'string') {
-        await sendCommand(step)
+        await sendAndWait(step, 5000)
       } else if (step.command) {
-        await sendCommand(step.command)
-        if (step.delay) await new Promise(r => setTimeout(r, step.delay))
+        await sendAndWait(step.command, (step.delay || 0) + 5000)
       } else if (step.delay) {
         addToTerminal(`Waiting ${step.delay / 1000}s...`, 'system')
         await new Promise(r => setTimeout(r, step.delay))
@@ -204,7 +245,6 @@ export const useSerialStore = defineStore('serial', () => {
 
   const scanAll = async () => {
     if (isDemoMode.value) {
-      const { parseDemoAP, parseDemoBLE } = await import('../services/parserEngine')
       addToTerminal('> scanall (demo)', 'command')
       await new Promise(r => setTimeout(r, 1500))
       parseDemoAP()
