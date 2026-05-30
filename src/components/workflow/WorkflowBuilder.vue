@@ -149,13 +149,15 @@ const currentStep = ref(-1)
 const execLog = ref([])
 const startTime = ref(null)
 const beforeSnapshot = ref(null)
+const cachedResults = ref(null)
 
 const addLog = (msg, icon = '•', color = 'text-slate-400') => {
   const t = new Date()
-  execLog.value = [...execLog.value, {
+  execLog.value.push({
     time: `${t.getHours().toString().padStart(2, '0')}:${t.getMinutes().toString().padStart(2, '0')}:${t.getSeconds().toString().padStart(2, '0')}`,
     msg, icon, color
-  }]
+  })
+  if (execLog.value.length > 500) execLog.value.shift()
 }
 
 const duration = computed(() => {
@@ -198,14 +200,17 @@ const stepStatusTextClass = (i) => {
   return 'text-slate-300'
 }
 
+const computeResults = () => ({
+  aps: apStore.apCount - beforeSnapshot.value.aps,
+  stations: apStore.totalStations - beforeSnapshot.value.stations,
+  ble: bleStore.deviceCount - beforeSnapshot.value.ble,
+  packets: dashStore.packetsCaptured - beforeSnapshot.value.packets
+})
+
 const results = computed(() => {
+  if (cachedResults.value) return cachedResults.value
   if (!beforeSnapshot.value || !completed.value) return { aps: 0, stations: 0, ble: 0, packets: 0 }
-  return {
-    aps: apStore.apCount - beforeSnapshot.value.aps,
-    stations: apStore.totalStations - beforeSnapshot.value.stations,
-    ble: bleStore.deviceCount - beforeSnapshot.value.ble,
-    packets: dashStore.packetsCaptured - beforeSnapshot.value.packets
-  }
+  return computeResults()
 })
 
 const openWorkflow = (wf) => {
@@ -219,12 +224,30 @@ const openWorkflow = (wf) => {
   execLog.value = []
   startTime.value = null
   beforeSnapshot.value = null
+  cachedResults.value = null
 }
 
 const closeWorkflow = () => {
   aborted.value = true
   isRunning.value = false
   selectedWorkflow.value = null
+  cachedResults.value = null
+  if (serialStore.isConnected) {
+    serialStore.sendCommand('stopscan')
+  }
+}
+
+const waitForInput = (stepIndex) => {
+  return new Promise((resolve) => {
+    const check = () => {
+      if (stepInputs.value[stepIndex] || aborted.value) {
+        resolve(stepInputs.value[stepIndex] || '')
+      } else {
+        requestAnimationFrame(check)
+      }
+    }
+    check()
+  })
 }
 
 const goToTab = (tab) => {
@@ -241,6 +264,8 @@ const executeWorkflow = async () => {
   currentStep.value = 0
   startTime.value = Date.now()
   execLog.value = []
+  addLog(`Starting "${wf.name}" — ${wf.steps.length} steps`, '▶', 'text-cyan-400')
+
   beforeSnapshot.value = {
     aps: apStore.apCount,
     stations: apStore.totalStations,
@@ -248,91 +273,113 @@ const executeWorkflow = async () => {
     packets: dashStore.packetsCaptured
   }
 
-  addLog(`Starting "${wf.name}" — ${wf.steps.length} steps`, '▶', 'text-cyan-400')
+  try {
+    for (let i = 0; i < wf.steps.length; i++) {
+      if (aborted.value) {
+        addLog(`Aborted at step ${i + 1}`, '✕', 'text-red-400')
+        break
+      }
+      currentStep.value = i
+      const step = wf.steps[i]
+      let cmd = step.command
+      addLog(`Step ${i + 1}: ${step.desc}`, '→', 'text-indigo-400')
 
-  const hasForEachAP = wf.steps.some(s => s.forEachAP)
-  if (hasForEachAP) {
-    apStore.clearAPs()
-    addLog(`Cleared AP list for fresh scan`, '•', 'text-slate-500')
-  }
-
-  for (let i = 0; i < wf.steps.length; i++) {
-    if (aborted.value) {
-      addLog(`Aborted at step ${i + 1}`, '✕', 'text-red-400')
-      break
-    }
-    currentStep.value = i
-    const step = wf.steps[i]
-    let cmd = step.command
-    addLog(`Step ${i + 1}: ${step.desc}`, '→', 'text-indigo-400')
-
-    if (step.forEachAP) {
-      const aps = apStore.sortedAPs
-      const seen = new Set()
-      const indices = []
-      for (const ap of aps) {
-        const idx = ap.index
-        if (idx !== undefined && idx !== null && !seen.has(idx)) {
-          seen.add(idx)
-          indices.push(idx)
+      if (step.forEachAP) {
+        const aps = apStore.sortedAPs
+        const seen = new Set()
+        const indices = []
+        for (const ap of aps) {
+          const idx = ap.index
+          if (idx !== undefined && idx !== null && !seen.has(idx)) {
+            seen.add(idx)
+            indices.push(idx)
+          }
         }
-      }
-      indices.sort((a, b) => a - b)
-      if (!indices.length) {
-        addLog(`No APs in list, skipping`, '◷', 'text-amber-400')
-        continue
-      }
-      addLog(`Running for ${indices.length} APs`, '→', 'text-indigo-400')
-      for (const idx of indices) {
-        if (aborted.value) break
-        const subCmd = cmd.replace('{idx}', idx)
-        await serialStore.sendAndWait(subCmd, 5000)
-        dashStore.incrementCommands()
-        addLog(`[${idx}]: ${subCmd}`, '⚡', 'text-yellow-400')
-      }
-      addLog(`Done`, '✓', 'text-emerald-400')
-      continue
-    }
-
-    if (step.requiresInput) {
-      const input = stepInputs.value[i]
-      if (!input) {
-        addLog(`Waiting for input: ${step.label}`, '◷', 'text-amber-400')
-        while (!stepInputs.value[i] && !aborted.value) {
-          await new Promise(r => setTimeout(r, 100))
+        indices.sort((a, b) => a - b)
+        if (!indices.length) {
+          addLog(`No APs in list, skipping`, '◷', 'text-amber-400')
+          continue
         }
-        if (aborted.value) break
-      }
-      const rawInput = stepInputs.value[i] || ''
-
-      if (step.splitInput) {
-        const items = rawInput.split(',').map(s => s.trim()).filter(Boolean)
-        addLog(`Input: ${items.length} values`, '✓', 'text-emerald-400')
-        for (const item of items) {
+        const total = indices.length
+        addLog(`Running for ${total} APs`, '→', 'text-indigo-400')
+        for (let j = 0; j < total; j++) {
           if (aborted.value) break
-          const subCmd = cmd.replace('{input}', item)
-          await serialStore.sendAndWait(subCmd, 5000)
-          dashStore.incrementCommands()
-          addLog(`Sent: ${subCmd}`, '⚡', 'text-yellow-400')
+          const idx = indices[j]
+          const subCmd = cmd.replaceAll('{idx}', idx)
+          try {
+            await serialStore.sendAndWait(subCmd, 5000)
+            dashStore.incrementCommands()
+            addLog(`[${j + 1}/${total}] idx ${idx}: ${subCmd}`, '⚡', 'text-yellow-400')
+          } catch (e) {
+            addLog(`Step ${i + 1} failed: ${e.message}`, '✕', 'text-red-400')
+            aborted.value = true
+            break
+          }
         }
+        addLog(`Done`, '✓', 'text-emerald-400')
         continue
       }
 
-      cmd = cmd.replace('{input}', rawInput)
-      addLog(`Input received: ${rawInput}`, '✓', 'text-emerald-400')
-    }
+      if (step.requiresInput) {
+        const input = stepInputs.value[i]
+        if (!input) {
+          addLog(`Waiting for input: ${step.label}`, '◷', 'text-amber-400')
+          const waited = await waitForInput(i)
+          if (aborted.value) break
+          stepInputs.value[i] = waited
+        }
+        const rawInput = stepInputs.value[i] || ''
 
-    await serialStore.sendAndWait(cmd, step.delay ? step.delay + 5000 : 15000)
-    dashStore.incrementCommands()
-    addLog(`Sent: ${cmd}`, '⚡', 'text-yellow-400')
-    addLog(`Done`, '✓', 'text-emerald-400')
+        if (!cmd.includes('{input}')) {
+          addLog(`Warning: command doesn't support input substitution`, '⚠', 'text-amber-400')
+        }
+
+        if (step.splitInput) {
+          const items = rawInput.split(',').map(s => s.trim()).filter(Boolean)
+          addLog(`Input: ${items.length} values`, '✓', 'text-emerald-400')
+          for (const item of items) {
+            if (aborted.value) break
+            const subCmd = cmd.replaceAll('{input}', item)
+            try {
+              await serialStore.sendAndWait(subCmd, 5000)
+              dashStore.incrementCommands()
+              addLog(`Sent: ${subCmd}`, '⚡', 'text-yellow-400')
+            } catch (e) {
+              addLog(`Step ${i + 1} failed: ${e.message}`, '✕', 'text-red-400')
+              aborted.value = true
+              break
+            }
+          }
+          continue
+        }
+
+        cmd = cmd.replaceAll('{input}', rawInput)
+        addLog(`Input received: ${rawInput}`, '✓', 'text-emerald-400')
+      }
+
+      try {
+        await serialStore.sendAndWait(cmd, step.delay ? step.delay + 5000 : 15000)
+        dashStore.incrementCommands()
+        addLog(`Sent: ${cmd}`, '⚡', 'text-yellow-400')
+        addLog(`Done`, '✓', 'text-emerald-400')
+      } catch (e) {
+        addLog(`Step ${i + 1} failed: ${e.message}`, '✕', 'text-red-400')
+        aborted.value = true
+        break
+      }
+    }
+  } catch (e) {
+    addLog(`Workflow crashed: ${e.message}`, '✕', 'text-red-400')
   }
 
-  await serialStore.sendAndWait('stopscan', 5000)
-  addLog('Sent: stopscan (cleanup)', '⏹', 'text-slate-400')
+  try {
+    await serialStore.sendAndWait('stopscan', 5000)
+    addLog('Sent: stopscan (cleanup)', '⏹', 'text-slate-400')
+  } catch (_) { }
 
   if (!aborted.value) {
     completed.value = true
+    cachedResults.value = computeResults()
     addLog(`Completed ${wf.steps.length} steps in ${duration.value}`, '✓', 'text-emerald-400')
   } else {
     addLog(`Stopped`, '✕', 'text-red-400')

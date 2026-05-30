@@ -54,9 +54,18 @@ export function parseLine(line) {
 
 const MAC_RE = /([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})/
 
+const AP_BEACON_RE = new RegExp(`^(-?\\d+)\\s+Ch:\\s*(\\d+)\\s+${MAC_RE.source}\\s+ESSID:\\s*(.+)`, 'i')
+const STATION_DETECT_RE = new RegExp(`^(\\d+):\\s*(ap|sta):\\s*(${MAC_RE.source})\\s*->\\s*(sta|ap):\\s*(${MAC_RE.source})`)
+const STATION_LIST_STA_RE = new RegExp(`^\\s+\\[(\\d+)\\]\\s+(${MAC_RE.source})(?:\\s+\\(selected\\))?\\s*$`)
+const DEAUTH_SNIFF_RE = new RegExp('^(-?\\d+)\\s+Ch:\\s*(\\d+)\\s+' + MAC_RE.source + '\\s*->\\s*' + MAC_RE.source)
+const PROBE_SNIFF_RE = new RegExp(`^(-?\\d+)\\s+Ch:\\s*(\\d+)\\s+Client:\\s+(${MAC_RE.source})\\s+Requesting:\\s+(.+)`)
+const PMKID_CAPTURE_RE = new RegExp('Received EAPOL:\\s*(' + MAC_RE.source + ')')
+const BLE_SNIFF_MAC_RE = new RegExp(`^(-?\\d+)\\s+(${MAC_RE.source})\\s*$`)
+
+let _bleKeyCounter = 0
+
 function parseAPBeacon(line, apStore, dashStore) {
-  const re = new RegExp(`^(-?\\d+)\\s+Ch:\\s*(\\d+)\\s+${MAC_RE.source}\\s+ESSID:\\s*(.+)`, 'i')
-  const m = line.match(re)
+  const m = line.match(AP_BEACON_RE)
   if (!m) return false
 
   const [, rssi, ch, bssid, essidRaw] = m
@@ -105,8 +114,7 @@ function parseAPList(line, apStore, dashStore) {
 }
 
 function parseStationDetect(line, apStore, dashStore) {
-  const re = new RegExp(`^(\\d+):\\s*(ap|sta):\\s*(${MAC_RE.source})\\s*->\\s*(sta|ap):\\s*(${MAC_RE.source})`)
-  const m = line.match(re)
+  const m = line.match(STATION_DETECT_RE)
   if (!m) return false
 
   const [, id, firstType, firstMac, secondType, secondMac] = m
@@ -169,13 +177,11 @@ function parseStationList(line, apStore, dashStore) {
   const apM = line.match(apRe)
   if (apM) {
     const [, index, essid, rssi] = apM
-    dashStore.lastStationAPIndex = parseInt(index)
-    dashStore.lastStationAPName = essid.trim()
+    dashStore.setLastStationAP(parseInt(index), essid.trim())
     return true
   }
 
-  const staRe = new RegExp('^\\s+\\[(\\d+)\\]\\s+(' + MAC_RE.source + ')(?:\\s+\\(selected\\))?\\s*$')
-  const staM = line.match(staRe)
+  const staM = line.match(STATION_LIST_STA_RE)
   if (staM) {
     const [, staIndex, staMac] = staM
     const apIndex = dashStore.lastStationAPIndex
@@ -198,8 +204,7 @@ function parseStationList(line, apStore, dashStore) {
 }
 
 function parseDeauthSniff(line, apStore, dashStore) {
-  const re = new RegExp('^(-?\\d+)\\s+Ch:\\s*(\\d+)\\s+' + MAC_RE.source + '\\s*->\\s*' + MAC_RE.source)
-  const m = line.match(re)
+  const m = line.match(DEAUTH_SNIFF_RE)
   if (!m) return false
 
   const [, rssi, ch, srcMac, dstMac] = m
@@ -209,8 +214,7 @@ function parseDeauthSniff(line, apStore, dashStore) {
 }
 
 function parseProbeSniff(line, apStore, dashStore) {
-  const re = new RegExp(`^(-?\\d+)\\s+Ch:\\s*(\\d+)\\s+Client:\\s+(${MAC_RE.source})\\s+Requesting:\\s+(.+)`)
-  const m = line.match(re)
+  const m = line.match(PROBE_SNIFF_RE)
   if (!m) return false
 
   const [, rssi, ch, clientMac, ssid] = m
@@ -223,7 +227,7 @@ function parseProbeSniff(line, apStore, dashStore) {
 
 function parsePMKID(line, apStore, dashStore) {
   if (line.includes('Received EAPOL')) {
-    const m = line.match(new RegExp('Received EAPOL:\\s*(' + MAC_RE.source + ')'))
+    const m = line.match(PMKID_CAPTURE_RE)
     if (m) {
       dashStore.addEvent('pmkid', `EAPOL: ${m[1].toUpperCase()}`)
       dashStore.incrementPackets()
@@ -240,7 +244,7 @@ function parseBLESniff(line, bleStore, dashStore) {
     const [, rssi, name] = m
     const isMac = MAC_RE.test(name)
     bleStore.updateOrAddDevice({
-      mac: isMac ? name.toUpperCase() : `BLE:${rssi}`,
+      mac: isMac ? name.toUpperCase() : `BLE:${rssi}-${++_bleKeyCounter}`,
       rssi: parseInt(rssi),
       name: isMac ? `BLE Device ${name}` : name.trim(),
       lastSeen: new Date()
@@ -249,8 +253,7 @@ function parseBLESniff(line, bleStore, dashStore) {
     return true
   }
 
-  const re2 = new RegExp(`^(-?\\d+)\\s+(${MAC_RE.source})\\s*$`)
-  const m2 = line.match(re2)
+  const m2 = line.match(BLE_SNIFF_MAC_RE)
   if (m2) {
     const [, rssi, mac] = m2
     bleStore.updateOrAddDevice({

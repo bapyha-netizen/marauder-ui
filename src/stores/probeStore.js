@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { shallowRef, triggerRef, computed } from 'vue'
 
 export const useProbeStore = defineStore('probe', () => {
-  const probes = ref([])
+  const probes = shallowRef([])
 
   const probeCount = computed(() => probes.value.length)
 
@@ -19,10 +19,9 @@ export const useProbeStore = defineStore('probe', () => {
   })
 
   function addProbe(rssi, ch, clientMac, ssid) {
-    probes.value = [
-      ...probes.value,
-      { rssi, ch, clientMac: clientMac.toUpperCase(), ssid, time: new Date() }
-    ].slice(-500)
+    probes.value.push({ rssi, ch, clientMac: clientMac.toUpperCase(), ssid, time: new Date() })
+    if (probes.value.length > 500) probes.value.shift()
+    triggerRef(probes)
   }
 
   function clearProbes() {

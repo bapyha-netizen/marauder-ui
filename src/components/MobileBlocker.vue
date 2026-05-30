@@ -17,12 +17,23 @@ import { ref, onMounted, onUnmounted } from 'vue'
 
 const isMobileDevice = ref(false)
 
+const checkMobile = () => {
+  const ua = navigator.userAgent
+  const isIPad = /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1
+  const isMobileUA = /Android|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
+  const isNarrowScreen = window.innerWidth <= 768
+  const hasWebSerial = 'serial' in navigator
+  isMobileDevice.value = (isMobileUA || isIPad || isNarrowScreen) && !hasWebSerial
+}
+
 onMounted(() => {
-  const check = () => {
-    isMobileDevice.value = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768
-  }
-  check()
-  window.addEventListener('resize', check)
-  onUnmounted(() => window.removeEventListener('resize', check))
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+  window.addEventListener('orientationchange', checkMobile)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile)
+  window.removeEventListener('orientationchange', checkMobile)
 })
 </script>

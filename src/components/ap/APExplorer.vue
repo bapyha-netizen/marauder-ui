@@ -113,29 +113,34 @@ const toggleExpand = (bssid) => {
 }
 
 const filteredAPs = computed(() => {
-  let list = Array.from(apStore.accessPoints.values())
+  let list = apStore.sortedAPs
   if (search.value) {
     const q = search.value.toLowerCase()
     list = list.filter(ap => ap.essid.toLowerCase().includes(q) || ap.bssid.toLowerCase().includes(q))
   }
-  list.sort((a, b) => {
-    switch (sortBy.value) {
-      case 'rssi': return (b.rssi || -999) - (a.rssi || -999)
-      case 'essid': return (a.essid || '').localeCompare(b.essid || '')
-      case 'channel': return (a.channel || 0) - (b.channel || 0)
-      case 'stations': return (b.stations?.length || 0) - (a.stations?.length || 0)
-      default: return 0
-    }
-  })
+  if (sortBy.value !== 'rssi') {
+    list = [...list].sort((a, b) => {
+      switch (sortBy.value) {
+        case 'essid': return (a.essid || '').localeCompare(b.essid || '')
+        case 'channel': return (a.channel || 0) - (b.channel || 0)
+        case 'stations': return (b.stations?.length || 0) - (a.stations?.length || 0)
+        default: return 0
+      }
+    })
+  }
   return list
 })
 
-const toggleSelect = (ap) => {
+const toggleSelect = async (ap) => {
   if (ap.index !== undefined && ap.index !== null) {
-    serialStore.sendCommand(`select -a ${ap.index}`)
-    const newState = !ap.isSelected
-    apStore.updateAP(ap.index, { isSelected: newState })
-    toastShow(newState ? `Selected AP #${ap.index}: ${ap.essid}` : `Deselected AP #${ap.index}`, 'info')
+    try {
+      await serialStore.sendCommand(`select -a ${ap.index}`)
+      const newState = !ap.isSelected
+      apStore.updateAP(ap.index, { isSelected: newState })
+      toastShow(newState ? `Selected AP #${ap.index}: ${ap.essid}` : `Deselected AP #${ap.index}`, 'info')
+    } catch (e) {
+      toastShow(`Failed to select AP: ${e.message}`, 'error')
+    }
   }
 }
 
@@ -144,15 +149,19 @@ const allSelected = computed(() => {
   return list.length > 0 && list.every(ap => ap.isSelected)
 })
 
-const toggleSelectAll = () => {
+const toggleSelectAll = async () => {
   const newState = !allSelected.value
-  serialStore.sendCommand('select -a all')
-  for (const [key, ap] of apStore.accessPoints) {
-    if (ap.index !== undefined) {
-      apStore.updateAP(ap.index, { isSelected: newState })
+  try {
+    await serialStore.sendCommand('select -a all')
+    for (const [key, ap] of apStore.accessPoints) {
+      if (ap.index !== undefined) {
+        apStore.updateAP(ap.index, { isSelected: newState })
+      }
     }
+    toastShow(newState ? 'All APs selected' : 'All APs deselected', 'info')
+  } catch (e) {
+    toastShow(`Failed to select all APs: ${e.message}`, 'error')
   }
-  toastShow(newState ? 'All APs selected' : 'All APs deselected', 'info')
 }
 
 const sparklinePoints = (history) => {

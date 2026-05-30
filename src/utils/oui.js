@@ -1,3 +1,5 @@
+const _vendorCache = new Map()
+
 const OUI_DB = {
   '00:00:0C': 'Cisco',
   '00:01:42': 'HTC',
@@ -1151,5 +1153,8 @@ const OUI_DB = {
 export function lookupVendor(mac) {
   if (!mac || mac.length < 8) return ''
   const prefix = mac.toUpperCase().substring(0, 8)
-  return OUI_DB[prefix] || ''
+  if (_vendorCache.has(prefix)) return _vendorCache.get(prefix)
+  const vendor = OUI_DB[prefix] || ''
+  _vendorCache.set(prefix, vendor)
+  return vendor
 }

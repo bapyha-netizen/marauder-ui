@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { shallowRef, computed } from 'vue'
 
 export const useBleStore = defineStore('ble', () => {
-  const devices = ref(new Map())
+  const devices = shallowRef(new Map())
 
   const sortedDevices = computed(() => {
     return Array.from(devices.value.values())
@@ -12,9 +12,10 @@ export const useBleStore = defineStore('ble', () => {
   const deviceCount = computed(() => devices.value.size)
 
   function updateOrAddDevice(dev) {
-    const existing = devices.value.get(dev.mac)
     const now = new Date()
-    const updated = {
+    const newMap = new Map(devices.value)
+    const existing = newMap.get(dev.mac)
+    newMap.set(dev.mac, {
       mac: dev.mac,
       name: dev.name || existing?.name || 'Unknown',
       rssi: dev.rssi ?? existing?.rssi,
@@ -25,9 +26,11 @@ export const useBleStore = defineStore('ble', () => {
       firstSeen: existing?.firstSeen || now,
       lastSeen: dev.lastSeen || now,
       packetCount: (existing?.packetCount || 0) + 1
+    })
+    const cutoff = Date.now() - 300000
+    for (const [mac, d] of newMap.entries()) {
+      if (d.lastSeen.getTime() < cutoff) newMap.delete(mac)
     }
-    const newMap = new Map(devices.value)
-    newMap.set(dev.mac, updated)
     devices.value = newMap
   }
 

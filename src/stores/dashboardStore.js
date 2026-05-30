@@ -1,17 +1,17 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, shallowRef, triggerRef, computed } from 'vue'
 
 export const useDashboardStore = defineStore('dashboard', () => {
   const commandsSent = ref(0)
   const packetsCaptured = ref(0)
   const sessionStart = ref(new Date())
-  const events = ref([])
+  const events = shallowRef([])
   const tick = ref(0)
   const lastStationAPIndex = ref(null)
   const lastStationAPName = ref('')
-  const packetCounts = ref({ beacon: 0, probe: 0, deauth: 0, eapol: 0, data: 0, management: 0 })
-  const channelUtilization = ref({})
-  const ipList = ref([])
+  const packetCounts = shallowRef({ beacon: 0, probe: 0, deauth: 0, eapol: 0, data: 0, management: 0 })
+  const channelUtilization = shallowRef({})
+  const ipList = shallowRef([])
 
   const sessionDuration = computed(() => {
     void tick.value
@@ -41,7 +41,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   function addEvent(type, data) {
-    events.value = [{ type, data, time: new Date() }, ...events.value].slice(0, 200)
+    events.value.unshift({ type, data, time: new Date() })
+    if (events.value.length > 200) events.value.pop()
+    triggerRef(events)
   }
 
   function setPacketCounts(counts) {
@@ -52,8 +54,18 @@ export const useDashboardStore = defineStore('dashboard', () => {
     channelUtilization.value = { ...channelUtilization.value, ...util }
   }
 
+  function setStats(stats) {
+    commandsSent.value = stats.commandsSent || 0
+    packetsCaptured.value = stats.packetsCaptured || 0
+  }
+
   function setIPList(list) {
     ipList.value = list
+  }
+
+  function setLastStationAP(index, name) {
+    lastStationAPIndex.value = index
+    lastStationAPName.value = name
   }
 
   function resetStats() {
@@ -70,7 +82,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     sessionDuration, lastStationAPIndex, lastStationAPName,
     packetCounts, channelUtilization, ipList,
     incrementCommands, incrementPackets,
-    addEvent, setPacketCounts, setChannelUtilization, setIPList,
-    resetStats, startTick, stopTick
+    addEvent, setPacketCounts, setChannelUtilization, setIPList, setStats,
+    setLastStationAP, resetStats, startTick, stopTick
   }
 })

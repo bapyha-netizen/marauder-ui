@@ -127,12 +127,8 @@
             <span class="text-slate-500">Session: <span class="font-semibold text-slate-200">{{ dashStore.sessionDuration }}</span></span>
           </div>
           <div class="flex space-x-2">
-            <button @click="serialStore.scanAll()" class="btn-primary btn-sm">Scan All</button>
-            <button @click="serialStore.sendCommand('sniffbt')" class="btn-primary btn-sm">Scan BLE</button>
-            <button @click="serialStore.sendCommand('packetcount')" class="btn-primary btn-sm">Pkts</button>
-            <button @click="serialStore.sendCommand('channelanalyzer')" class="btn-primary btn-sm">Ch An</button>
-            <button @click="serialStore.clearListAndScan()" class="btn-ghost btn-sm">Clear List</button>
-            <button @click="handleClear" class="btn-ghost btn-sm">Clear</button>
+            <button @click="serialStore.clearListAndScan()" class="btn-primary btn-sm">Clear & Scan</button>
+            <button @click="handleClear" class="btn-ghost btn-sm">Clear All</button>
             <button @click="handleExport" class="btn-ghost btn-sm" title="Export session as JSON">Export</button>
             <button @click="importRef?.click()" class="btn-ghost btn-sm" title="Import session from JSON">Import</button>
             <input ref="importRef" type="file" accept=".json" @change="handleImport" class="hidden">
@@ -251,10 +247,7 @@ const handleImport = async (e) => {
     if (data.ble) data.ble.forEach(d => bleStore.updateOrAddDevice(d))
     if (data.packetCounts) dashStore.setPacketCounts(data.packetCounts)
     if (data.channelUtilization) dashStore.setChannelUtilization(data.channelUtilization)
-    if (data.stats) {
-      for (let i = 0; i < data.stats.commandsSent; i++) dashStore.incrementCommands()
-      for (let i = 0; i < data.stats.packetsCaptured; i++) dashStore.incrementPackets()
-    }
+    if (data.stats) dashStore.setStats(data.stats)
     toastShow(`Session imported: ${data.apCount || 0} APs, ${data.bleCount || 0} BLE`, 'success')
   } catch (err) {
     toastShow(`Import failed: ${err.message}`, 'error')

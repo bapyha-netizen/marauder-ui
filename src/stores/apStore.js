@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { shallowRef, triggerRef, computed } from 'vue'
 
 export const useApStore = defineStore('ap', () => {
-  const accessPoints = ref(new Map())
+  const accessPoints = shallowRef(new Map())
 
   const sortedAPs = computed(() => {
     return Array.from(accessPoints.value.values())
@@ -59,6 +59,28 @@ export const useApStore = defineStore('ap', () => {
     const newKey = ap.bssid ? ap.bssid.toUpperCase()
       : existingKey || `_ap:${ap.channel ?? '?'}:${ap.essid || ''}:${ap.index ?? Date.now()}`
     const now = new Date()
+    if (existing && existingKey === newKey) {
+      Object.assign(existing, {
+        index: ap.index ?? existing.index,
+        essid: ap.essid || existing.essid,
+        bssid: ap.bssid || existing.bssid,
+        channel: ap.channel ?? existing.channel,
+        rssi: ap.rssi ?? existing.rssi,
+        encryption: ap.encryption || existing.encryption || '',
+        isHidden: ap.isHidden ?? existing.isHidden ?? false,
+        isSelected: ap.isSelected ?? existing.isSelected ?? false,
+        lastSeen: ap.lastSeen || now,
+        stations: ap.stations || existing.stations,
+        vendor: ap.vendor || existing.vendor || '',
+        frameCount: (existing.frameCount || 0) + (ap.frameCount || 0)
+      })
+      if (existing.rssi != null) {
+        existing.rssiHistory.push(existing.rssi)
+        if (existing.rssiHistory.length > 20) existing.rssiHistory.shift()
+      }
+      triggerRef(accessPoints)
+      return
+    }
     const newAP = {
       index: ap.index ?? existing?.index,
       essid: ap.essid || existing?.essid || '(hidden)',
@@ -74,9 +96,9 @@ export const useApStore = defineStore('ap', () => {
       frameCount: (existing?.frameCount || 0) + (ap.frameCount || 0),
       rssiHistory: existing?.rssiHistory ? [...existing.rssiHistory] : []
     }
-    if (newAP.rssi !== undefined && newAP.rssi !== null) {
+    if (newAP.rssi != null) {
       newAP.rssiHistory.push(newAP.rssi)
-      if (newAP.rssiHistory.length > 20) newAP.rssiHistory = newAP.rssiHistory.slice(-20)
+      if (newAP.rssiHistory.length > 20) newAP.rssiHistory.shift()
     }
     const newMap = new Map(accessPoints.value)
     if (existingKey && existingKey !== newKey) newMap.delete(existingKey)

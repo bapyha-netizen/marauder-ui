@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, shallowRef } from 'vue'
 import { useApStore } from './apStore'
 import { parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil } from '../services/parserEngine'
 
@@ -9,7 +9,7 @@ export const useSerialStore = defineStore('serial', () => {
   const readLoopActive = ref(false)
   const isConnected = ref(false)
   const isDemoMode = ref(false)
-  const terminalOutput = ref([])
+  const terminalOutput = shallowRef([])
   const rawBuffer = ref('')
   const baudRate = ref(115200)
   let listenPromise = null
@@ -135,7 +135,7 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   const sendCommand = async (command) => {
-    if (!command) return
+    if (!command) return false
     if (command === 'clearlist -a') {
       useApStore().clearAPs()
     } else if (command === 'clearlist -c') {
@@ -144,26 +144,28 @@ export const useSerialStore = defineStore('serial', () => {
     if (isDemoMode.value) {
       addToTerminal(`> ${command}`, 'command')
       _simulateDemoCommand(command)
-      return
+      return true
     }
     if (!port.value) {
       addToTerminal('Not connected', 'error')
-      return
+      return false
     }
     try {
       if (!port.value.writable) {
         addToTerminal('Port is not writable', 'error')
-        return
+        return false
       }
       const writer = port.value.writable.getWriter()
       try {
         await writer.write(new TextEncoder().encode(command + '\n'))
         addToTerminal(`> ${command}`, 'command')
+        return true
       } finally {
         writer.releaseLock()
       }
     } catch (e) {
       addToTerminal(`Failed: ${e.message}`, 'error')
+      return false
     }
   }
 
@@ -214,19 +216,31 @@ export const useSerialStore = defineStore('serial', () => {
         return
       }
       const echo = `> ${command}`
+      let resolved = false
       const unsub = onLine((line) => {
-        if (line !== echo && PROMPT_RE.test(line)) {
+        if (!resolved && line !== echo && PROMPT_RE.test(line)) {
+          resolved = true
           unsub()
           clearTimeout(timer)
           resolve()
         }
       })
-      sendCommand(command)
       const timer = setTimeout(() => {
-        unsub()
-        addToTerminal(`Timed out waiting for prompt after: ${command}`, 'warning')
-        resolve()
+        if (!resolved) {
+          resolved = true
+          unsub()
+          addToTerminal(`Timed out waiting for prompt after: ${command}`, 'warning')
+          resolve()
+        }
       }, timeout)
+      sendCommand(command).then(sent => {
+        if (!sent && !resolved) {
+          resolved = true
+          unsub()
+          clearTimeout(timer)
+          resolve()
+        }
+      })
     })
   }
 

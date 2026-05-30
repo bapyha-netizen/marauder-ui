@@ -1,3 +1,5 @@
+import { escHtml } from './format'
+
 const VENDORS = ['Cisco', 'TP-Link', 'Netgear', 'D-Link', 'Asus', 'Linksys', 'Ubiquiti']
 const SSID_PREFIXES = ['Home-', 'WiFi-', 'Network-', 'Guest-', 'Office-', 'IoT-']
 
@@ -62,11 +64,11 @@ export function generateDemoTerminalOutput() {
         '<span class="text-cyan-400">> scanall</span>',
         '<span class="text-green-400">Scanning for APs and Stations. Stop with stopscan</span>',
         ...aps.slice(0, 8).map(ap =>
-            `<span class="text-green-400">${ap.rssi} Ch: ${ap.channel} ${ap.bssid} ESSID: ${ap.essid}</span>`
+            `<span class="text-green-400">${ap.rssi} Ch: ${escHtml(ap.channel)} ${escHtml(ap.bssid)} ESSID: ${escHtml(ap.essid)}</span>`
         ),
         '<span class="text-cyan-400">> list -a</span>',
         ...aps.slice(0, 10).map((ap, i) =>
-            `<span class="text-green-400">[${i}][CH:${ap.channel}] ${ap.essid} ${ap.rssi}</span>`
+            `<span class="text-green-400">[${i}][CH:${escHtml(ap.channel)}] ${escHtml(ap.essid)} ${ap.rssi}</span>`
         ),
         '<span class="text-cyan-400">> sniffdeauth</span>',
         '<span class="text-green-400">Starting Deauth sniff. Stop with stopscan</span>',
@@ -80,7 +82,7 @@ export function generateDemoTerminalOutput() {
     ]
 
     lines.push(...aps.slice(0, 3).map((ap, i) =>
-        `<span class="text-yellow-400">${i}: ap: ${ap.bssid} -> sta: ${generateMAC()}</span>`
+        `<span class="text-yellow-400">${i}: ap: ${escHtml(ap.bssid)} -> sta: ${escHtml(generateMAC())}</span>`
     ))
 
     return lines

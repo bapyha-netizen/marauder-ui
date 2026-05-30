@@ -1,7 +1,7 @@
 <template>
   <div class="h-screen flex flex-col bg-slate-900">
-    <MobileBlocker />
-
+    <MobileBlocker v-if="isMobile" />
+    <template v-else>
     <!-- Header -->
     <header class="flex items-center justify-between px-5 py-3 bg-slate-800/90 border-b border-slate-700/50">
       <div class="flex items-center space-x-4">
@@ -91,6 +91,8 @@
       </div>
     </div>
 
+    </template>
+
     <!-- Toasts -->
     <div class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none">
       <div v-for="t in toasts" :key="t.id"
@@ -139,9 +141,15 @@ const toastClass = (type) => {
   return map[type] || map.info
 }
 
+const isMobile = ref(false)
 const activeTab = ref('dashboard')
 const demoInterval = ref(null)
 let lastLength = 0
+
+const checkMobile = () => {
+  const ua = navigator.userAgent
+  isMobile.value = (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) || window.innerWidth < 768
+}
 
 const tabs = computed(() => [
   { id: 'dashboard', label: 'Dashboard', icon: '📊', badge: '' },
@@ -153,15 +161,22 @@ const tabs = computed(() => [
 ])
 
 onMounted(() => {
+  checkMobile()
   startParser()
-  dashStore.startTick()
+  window.addEventListener('resize', checkMobile)
   window.addEventListener('beforeunload', sendStop)
 })
 onUnmounted(() => {
   stopParser()
   dashStore.stopTick()
+  window.removeEventListener('resize', checkMobile)
   window.removeEventListener('beforeunload', sendStop)
   if (demoInterval.value) clearInterval(demoInterval.value)
+})
+
+watch(() => serialStore.isConnected, (connected) => {
+  if (connected) dashStore.startTick()
+  else dashStore.stopTick()
 })
 
 const sendStop = () => {
@@ -169,11 +184,15 @@ const sendStop = () => {
 }
 
 watch(() => serialStore.terminalOutput.length, (newLen, oldLen) => {
-  if (newLen < oldLen) { lastLength = 0; return }
+  if (newLen < oldLen) { lastLength = Math.max(0, lastLength - (oldLen - newLen)); return }
   const lines = serialStore.terminalOutput
   if (lines.length > lastLength) {
     for (let i = lastLength; i < lines.length; i++) {
-      parseLine(lines[i].replace(/<[^>]+>/g, ''))
+      try {
+        parseLine(lines[i].replace(/<[^>]+>/g, ''))
+      } catch (e) {
+        console.error('Parse error:', e, lines[i])
+      }
     }
     lastLength = lines.length
   }
@@ -199,6 +218,7 @@ const handleDisconnect = async () => {
   toastShow('Disconnected', 'warning')
 }
 const handleEmergencyStop = () => {
+  if (!serialStore.isConnected) { toastShow('Not connected to ESP32', 'error'); return }
   serialStore.sendCommand('stopscan')
   toastShow('Emergency stop sent', 'warning')
 }
@@ -215,7 +235,6 @@ const toggleDemoMode = () => {
     serialStore.terminalOutput = []
     lastLength = 0
     apStore.clearAPs(); bleStore.clearDevices(); dashStore.resetStats()
-    const probeStore = useProbeStore()
     probeStore.clearProbes()
   }
 }
