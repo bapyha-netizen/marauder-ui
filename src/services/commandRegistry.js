@@ -235,7 +235,7 @@ export const COMMAND_GROUPS = [
         ru: 'GPS-трекер — непрерывное отслеживание текущих координат.' },
       { label: 'Wardrive', command: 'wardrive', icon: '🗺',
         ru: 'Режим вардрайвинга: непрерывное сканирование WiFi с записью GPS-координат в Wigle-формат.' },
-      { label: 'POI Tag', command: 'wardrivepoi Метка', icon: '📌',
+      { label: 'POI Tag', command: 'wardrivepoi', icon: '📌',
         ru: 'Отметить точку интереса (POI) во время вардрайва. Можно указать название.' },
       { label: 'Evil Portal', command: 'evilportal -c start', icon: '👿',
         ru: 'Запуск Evil Portal — captive portal для перехвата учётных данных.' },
