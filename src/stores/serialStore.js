@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, shallowRef } from 'vue'
 import { useApStore } from './apStore'
 import { parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil } from '../services/parserEngine'
+import { escHtml } from '../utils/format'
 
 export const useSerialStore = defineStore('serial', () => {
   const port = ref(null)
@@ -14,8 +15,6 @@ export const useSerialStore = defineStore('serial', () => {
   const baudRate = ref(115200)
   let listenPromise = null
   let _lineHandlers = []
-
-  const escHtml = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 
   const onLine = (handler) => {
     _lineHandlers.push(handler)
