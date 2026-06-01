@@ -10,13 +10,25 @@
           </div>
           <div class="flex items-center space-x-2">
             <span class="text-[11px] text-slate-500">{{ serialStore.terminalOutput.length }} lines</span>
+            <button @click="paused = !paused"
+              :class="paused ? 'bg-amber-600/50 text-amber-200' : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'"
+              class="px-1.5 py-0.5 text-[10px] rounded-md transition-colors"
+              :title="paused ? 'Resume terminal output' : 'Pause terminal output'">
+              {{ paused ? '▶ Resume' : '⏸ Pause' }}
+            </button>
+            <button @click="autoScroll = !autoScroll"
+              :class="!autoScroll ? 'bg-amber-600/50 text-amber-200' : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'"
+              class="px-1.5 py-0.5 text-[10px] rounded-md transition-colors"
+              :title="autoScroll ? 'Auto-scroll enabled' : 'Auto-scroll disabled'">
+              {{ autoScroll ? '⤓ Auto' : '⊘ Manual' }}
+            </button>
             <button @click="copyTerminal" v-if="serialStore.terminalOutput.length"
               class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors">Copy</button>
             <button @click="serialStore.clearOutput()"
               class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors">Clear</button>
           </div>
         </div>
-        <div ref="liveRef"
+        <div ref="liveRef" @scroll="onTerminalScroll"
           class="flex-1 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed scrollbar-thin bg-black/30">
           <div v-for="(line, i) in serialStore.terminalOutput" :key="i" v-html="line"
             class="hover:bg-white/5 rounded px-1 -mx-1"></div>
@@ -171,6 +183,8 @@ const probeStore = useProbeStore()
 
 const liveRef = ref(null)
 const wigleMenuOpen = ref(false)
+const paused = ref(false)
+const autoScroll = ref(true)
 
 const topAPs = computed(() => apStore.sortedAPs.slice(0, 10))
 
@@ -213,10 +227,19 @@ const pieSlices = computed(() => {
 })
 
 watch(() => serialStore.terminalOutput.length, () => {
+  if (paused.value) return
+  if (!autoScroll.value) return
   nextTick(() => {
     if (liveRef.value) liveRef.value.scrollTop = liveRef.value.scrollHeight
   })
 })
+
+const onTerminalScroll = () => {
+  if (!liveRef.value) return
+  const dist = liveRef.value.scrollHeight - (liveRef.value.scrollTop + liveRef.value.clientHeight)
+  if (dist > 60) autoScroll.value = false
+  else if (dist < 6) autoScroll.value = true
+}
 
 const handleClear = () => { apStore.clearAPs(); bleStore.clearDevices(); dashStore.resetStats() }
 

@@ -98,6 +98,7 @@
     </template>
 
     <!-- Toasts -->
+    <PWAInstallPrompt />
     <div class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none">
       <div v-for="t in toasts" :key="t.id"
         class="pointer-events-auto px-4 py-2 rounded-lg shadow-xl text-xs font-medium transition-all duration-300 cursor-pointer"
@@ -110,21 +111,22 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { defineAsyncComponent } from 'vue'
 import MobileBlocker from './components/MobileBlocker.vue'
+import PWAInstallPrompt from './components/PWAInstallPrompt.vue'
 import CommandBuilder from './components/CommandBuilder.vue'
-import DashboardView from './components/dashboard/DashboardView.vue'
-import APExplorer from './components/ap/APExplorer.vue'
-import BLEExplorer from './components/ble/BLEExplorer.vue'
-import WorkflowBuilder from './components/workflow/WorkflowBuilder.vue'
-import ProbesView from './components/probes/ProbesView.vue'
-import HelpGuide from './components/help/HelpGuide.vue'
+const DashboardView = defineAsyncComponent(() => import('./components/dashboard/DashboardView.vue'))
+const APExplorer = defineAsyncComponent(() => import('./components/ap/APExplorer.vue'))
+const BLEExplorer = defineAsyncComponent(() => import('./components/ble/BLEExplorer.vue'))
+const WorkflowBuilder = defineAsyncComponent(() => import('./components/workflow/WorkflowBuilder.vue'))
+const ProbesView = defineAsyncComponent(() => import('./components/probes/ProbesView.vue'))
+const HelpGuide = defineAsyncComponent(() => import('./components/help/HelpGuide.vue'))
 import { useSerialStore } from './stores/serialStore'
 import { useApStore } from './stores/apStore'
 import { useBleStore } from './stores/bleStore'
 import { useDashboardStore } from './stores/dashboardStore'
 import { useProbeStore } from './stores/probeStore'
 import { parseLine, parseDemoAP, parseDemoBLE, startParser, stopParser } from './services/parserEngine'
-import { generateDemoTerminalOutput } from './utils/demoData'
 import { useToast } from './utils/toast'
 
 const serialStore = useSerialStore()
@@ -134,6 +136,8 @@ const dashStore = useDashboardStore()
 const probeStore = useProbeStore()
 
 const { toasts, show: toastShow, remove: toastRemove } = useToast()
+
+const _loadDemoData = () => import('./utils/demoData').then(m => m.generateDemoTerminalOutput())
 
 const toastClass = (type) => {
   const map = {
@@ -236,11 +240,11 @@ const handleEmergencyStop = () => {
   toastShow('Emergency stop sent', 'warning')
 }
 
-const toggleDemoMode = () => {
+const toggleDemoMode = async () => {
   serialStore.toggleDemo()
   if (serialStore.isDemoMode) {
     lastLength = 0
-    serialStore.terminalOutput = generateDemoTerminalOutput()
+    serialStore.terminalOutput = await _loadDemoData()
     parseDemoAP(); parseDemoBLE()
     demoInterval.value = setInterval(() => { parseDemoAP(); parseDemoBLE() }, 5000)
   } else {
