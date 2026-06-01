@@ -10,6 +10,8 @@
           </div>
           <div class="flex items-center space-x-2">
             <span class="text-[11px] text-slate-500">{{ serialStore.terminalOutput.length }} lines</span>
+            <button @click="copyTerminal" v-if="serialStore.terminalOutput.length"
+              class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors">Copy</button>
             <button @click="serialStore.clearOutput()"
               class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors">Clear</button>
           </div>
@@ -157,6 +159,7 @@ import { useProbeStore } from '../../stores/probeStore'
 import { signalClass, dotClass } from '../../utils/format'
 import { useToast } from '../../utils/toast'
 import { apsToWigle, bleToWigle, probesToWigle, downloadWigle } from '../../utils/wigle'
+import { copyToClipboard } from '../../utils/clipboard'
 
 const { show: toastShow } = useToast()
 
@@ -275,6 +278,15 @@ const exportWigleProbes = () => {
   const date = new Date().toISOString().slice(0, 10)
   downloadWigle(`wigle-probes-${date}.csv`, csv)
   toastShow(`Exported ${probeStore.probes.length} probes to Wigle CSV`, 'success')
+}
+
+const copyTerminal = async () => {
+  const text = serialStore.terminalOutput
+    .map(line => line.replace(/<[^>]+>/g, ''))
+    .join('\n')
+  if (!text) return
+  const ok = await copyToClipboard(text)
+  toastShow(ok ? `Copied ${serialStore.terminalOutput.length} lines to clipboard` : 'Copy failed', ok ? 'success' : 'error')
 }
 
 const handleImport = async (e) => {

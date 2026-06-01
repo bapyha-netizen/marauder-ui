@@ -16,6 +16,7 @@
         <button @click="serialStore.scanAll()" class="btn-primary btn-sm">Scan</button>
         <button @click="serialStore.sendCommand('list -a')" class="btn-primary btn-sm">List</button>
         <button @click="apStore.clearAPs()" class="btn-ghost btn-sm">Clear</button>
+        <button v-if="apStore.accessPoints.size > 0" @click="copyAllBssids" class="btn-ghost btn-sm" title="Copy all BSSIDs (one per line)">Copy All</button>
       </div>
     </div>
 
@@ -50,6 +51,9 @@
                   <span class="font-medium text-slate-200">{{ ap.essid }}</span>
                   <span v-if="ap.isSelected" class="badge-green">sel</span>
                   <span v-if="ap.isHidden" class="badge-amber">hidden</span>
+                  <button v-if="ap.essid && ap.essid !== '(hidden)'" @click="copyEssid(ap)" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy SSID">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                  </button>
                 </div>
               </td>
               <td class="px-3 py-2 text-slate-300">{{ ap.channel }}</td>
@@ -60,7 +64,14 @@
                 </svg>
                 <span v-else class="text-slate-600 text-[10px]">--</span>
               </td>
-              <td class="px-3 py-2 font-mono text-slate-400 text-[11px]">{{ ap.bssid }}</td>
+              <td class="px-3 py-2 font-mono text-slate-400 text-[11px]">
+                <div class="flex items-center space-x-1.5">
+                  <span>{{ ap.bssid }}</span>
+                  <button @click="copyBssid(ap)" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy BSSID">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                  </button>
+                </div>
+              </td>
               <td class="px-3 py-2">
                 <span v-if="ap.vendor" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 font-medium">{{ ap.vendor }}</span>
               </td>
@@ -97,6 +108,7 @@ import { useApStore } from '../../stores/apStore'
 import { signalClass, fmtTimeRelative } from '../../utils/format'
 import { lookupVendor } from '../../utils/oui'
 import { useToast } from '../../utils/toast'
+import { copyToClipboard } from '../../utils/clipboard'
 
 const serialStore = useSerialStore()
 const apStore = useApStore()
@@ -110,6 +122,26 @@ const toggleExpand = (bssid) => {
   if (s.has(bssid)) s.delete(bssid)
   else s.add(bssid)
   expanded.value = s
+}
+
+const copyBssid = async (ap) => {
+  if (!ap.bssid) return
+  const ok = await copyToClipboard(ap.bssid)
+  toastShow(ok ? `Copied BSSID: ${ap.bssid}` : 'Copy failed', ok ? 'success' : 'error')
+}
+
+const copyEssid = async (ap) => {
+  if (!ap.essid || ap.essid === '(hidden)') return
+  const ok = await copyToClipboard(ap.essid)
+  toastShow(ok ? `Copied SSID: ${ap.essid}` : 'Copy failed', ok ? 'success' : 'error')
+}
+
+const copyAllBssids = async () => {
+  const all = Array.from(apStore.accessPoints.values())
+  if (all.length === 0) return
+  const text = all.map(a => a.bssid).filter(Boolean).join('\n')
+  const ok = await copyToClipboard(text)
+  toastShow(ok ? `Copied ${all.length} BSSIDs to clipboard` : 'Copy failed', ok ? 'success' : 'error')
 }
 
 const filteredAPs = computed(() => {

@@ -12,12 +12,16 @@
           <h1 class="text-base font-bold text-white tracking-tight">marauder-ui</h1>
         </div>
         <div class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
-          :class="serialStore.isConnected ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'">
-          <span class="w-1.5 h-1.5 rounded-full" :class="serialStore.isConnected ? 'bg-emerald-400' : 'bg-red-400'"></span>
-          {{ serialStore.isConnected ? 'Connected' : 'Disconnected' }}
+          :class="serialStore.isConnected ? 'bg-emerald-500/10 text-emerald-400' : serialStore.reconnectAttempts > 0 ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'">
+          <span class="w-1.5 h-1.5 rounded-full" :class="serialStore.isConnected ? 'bg-emerald-400' : serialStore.reconnectAttempts > 0 ? 'bg-amber-400 animate-pulse' : 'bg-red-400'"></span>
+          {{ serialStore.isConnected ? 'Connected' : serialStore.reconnectAttempts > 0 ? `Reconnecting (${serialStore.reconnectAttempts})` : 'Disconnected' }}
         </div>
       </div>
       <div class="flex items-center space-x-2">
+        <label class="flex items-center space-x-1.5 text-[11px] text-slate-400 cursor-pointer" :title="serialStore.autoReconnect ? 'Auto-reconnect enabled' : 'Auto-reconnect disabled'">
+          <input type="checkbox" v-model="serialStore.autoReconnect" class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-indigo-600 focus:ring-indigo-500">
+          <span>Auto-reconnect</span>
+        </label>
         <button v-if="!serialStore.isConnected" @click="toggleDemoMode"
           class="btn text-[11px]"
           :class="serialStore.isDemoMode ? 'btn-warning' : 'btn-ghost'">
