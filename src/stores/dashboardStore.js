@@ -51,7 +51,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   function setChannelUtilization(util) {
-    channelUtilization.value = { ...channelUtilization.value, ...util }
+    if (util && Object.keys(util).length === 0) {
+      channelUtilization.value = {}
+    } else {
+      channelUtilization.value = { ...channelUtilization.value, ...util }
+    }
   }
 
   function setStats(stats) {

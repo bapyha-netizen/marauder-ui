@@ -54,12 +54,12 @@ export function parseLine(line) {
 
 const MAC_RE = /([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})/
 
-const AP_BEACON_RE = new RegExp(`^(-?\\d+)\\s+Ch:\\s*(\\d+)\\s+${MAC_RE.source}\\s+ESSID:\\s*(.+)`, 'i')
+const AP_BEACON_RE = new RegExp(`^(-?\\d+)\\s+Ch:\\s*(\\d+)\\s+${MAC_RE.source}\\s+ESSID:\\s*(.*)$`, 'i')
 const STATION_DETECT_RE = new RegExp(`^(\\d+):\\s*(ap|sta):\\s*(${MAC_RE.source})\\s*->\\s*(sta|ap):\\s*(${MAC_RE.source})`)
-const STATION_LIST_STA_RE = new RegExp(`^\\s+\\[(\\d+)\\]\\s+(${MAC_RE.source})(?:\\s+\\(selected\\))?\\s*$`)
-const DEAUTH_SNIFF_RE = new RegExp('^(-?\\d+)\\s+Ch:\\s*(\\d+)\\s+' + MAC_RE.source + '\\s*->\\s*' + MAC_RE.source)
+const STATION_LIST_STA_RE = new RegExp(`^\\[(\\d+)\\]\\s+(${MAC_RE.source})(?:\\s+\\(selected\\))?\\s*$`)
+const DEAUTH_SNIFF_RE = new RegExp(`^(-?\\d+)\\s+Ch:\\s*(\\d+)\\s+${MAC_RE.source}\\s*->\\s*${MAC_RE.source}`)
 const PROBE_SNIFF_RE = new RegExp(`^(-?\\d+)\\s+Ch:\\s*(\\d+)\\s+Client:\\s+(${MAC_RE.source})\\s+Requesting:\\s+(.+)`)
-const PMKID_CAPTURE_RE = new RegExp('Received EAPOL:\\s*(' + MAC_RE.source + ')')
+const PMKID_CAPTURE_RE = new RegExp(`Received EAPOL:\\s*(${MAC_RE.source})`)
 const BLE_SNIFF_MAC_RE = new RegExp(`^(-?\\d+)\\s+(${MAC_RE.source})\\s*$`)
 
 let _bleKeyCounter = 0
@@ -117,7 +117,7 @@ function parseStationDetect(line, apStore, dashStore) {
   const m = line.match(STATION_DETECT_RE)
   if (!m) return false
 
-  const [, id, firstType, firstMac, secondType, secondMac] = m
+  const [, id, firstType, firstMac, , secondType, secondMac] = m
   const apMac = firstType === 'ap' ? firstMac.toUpperCase() : secondMac.toUpperCase()
   const staMac = firstType === 'sta' ? firstMac.toUpperCase() : secondMac.toUpperCase()
 
@@ -134,7 +134,6 @@ function parseStationDetect(line, apStore, dashStore) {
   }
 
   if (!found) {
-    const key = `unknown-${apMac}`
     apStore.updateOrAddAP({
       essid: '(unknown)',
       bssid: apMac,
@@ -143,7 +142,7 @@ function parseStationDetect(line, apStore, dashStore) {
       vendor: lookupVendor(apMac),
       lastSeen: new Date()
     })
-    apStore.addStation(key, {
+    apStore.addStation(apMac, {
       id: parseInt(id),
       mac: staMac
     })
@@ -183,7 +182,7 @@ function parseStationList(line, apStore, dashStore) {
 
   const staM = line.match(STATION_LIST_STA_RE)
   if (staM) {
-    const [, staIndex, staMac] = staM
+    const [, staIndex, staMac, ] = staM
     const apIndex = dashStore.lastStationAPIndex
     if (apIndex !== undefined) {
       for (const [key, ap] of apStore.accessPoints) {
@@ -207,7 +206,7 @@ function parseDeauthSniff(line, apStore, dashStore) {
   const m = line.match(DEAUTH_SNIFF_RE)
   if (!m) return false
 
-  const [, rssi, ch, srcMac, dstMac] = m
+  const [, rssi, ch, srcMac, , dstMac, ] = m
   dashStore.addEvent('deauth', `Deauth: ${srcMac} -> ${dstMac} Ch:${ch} RSSI:${rssi}`)
   dashStore.incrementPackets()
   return true
@@ -217,7 +216,7 @@ function parseProbeSniff(line, apStore, dashStore) {
   const m = line.match(PROBE_SNIFF_RE)
   if (!m) return false
 
-  const [, rssi, ch, clientMac, ssid] = m
+  const [, rssi, ch, clientMac, , ssid] = m
   dashStore.addEvent('probe', `Probe: ${clientMac} -> ${ssid.trim()} Ch:${ch} RSSI:${rssi}`)
   dashStore.incrementPackets()
   const probeStore = useProbeStore()
@@ -255,7 +254,7 @@ function parseBLESniff(line, bleStore, dashStore) {
 
   const m2 = line.match(BLE_SNIFF_MAC_RE)
   if (m2) {
-    const [, rssi, mac] = m2
+    const [, rssi, mac, ] = m2
     bleStore.updateOrAddDevice({
       mac: mac.toUpperCase(),
       rssi: parseInt(rssi),
