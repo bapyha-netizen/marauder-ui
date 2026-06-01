@@ -132,6 +132,14 @@
             <button @click="handleExport" class="btn-ghost btn-sm" title="Export session as JSON">Export</button>
             <button @click="importRef?.click()" class="btn-ghost btn-sm" title="Import session from JSON">Import</button>
             <input ref="importRef" type="file" accept=".json" @change="handleImport" class="hidden">
+            <div class="relative" v-if="apStore.apCount > 0 || bleStore.deviceCount > 0 || probeStore.probeCount > 0">
+              <button @click="wigleMenuOpen = !wigleMenuOpen" class="btn-ghost btn-sm" title="Export to Wigle.net format">Wigle ▾</button>
+              <div v-if="wigleMenuOpen" class="absolute right-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl z-20 py-1" @click.stop>
+                <button @click="exportWigleAPs" class="block w-full text-left px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-700">WiFi APs → Wigle CSV</button>
+                <button @click="exportWigleBLE" class="block w-full text-left px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-700">BLE → Wigle CSV</button>
+                <button @click="exportWigleProbes" class="block w-full text-left px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-700">Probes → Wigle CSV</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -145,8 +153,10 @@ import { useSerialStore } from '../../stores/serialStore'
 import { useApStore } from '../../stores/apStore'
 import { useBleStore } from '../../stores/bleStore'
 import { useDashboardStore } from '../../stores/dashboardStore'
+import { useProbeStore } from '../../stores/probeStore'
 import { signalClass, dotClass } from '../../utils/format'
 import { useToast } from '../../utils/toast'
+import { apsToWigle, bleToWigle, probesToWigle, downloadWigle } from '../../utils/wigle'
 
 const { show: toastShow } = useToast()
 
@@ -154,8 +164,10 @@ const serialStore = useSerialStore()
 const apStore = useApStore()
 const bleStore = useBleStore()
 const dashStore = useDashboardStore()
+const probeStore = useProbeStore()
 
 const liveRef = ref(null)
+const wigleMenuOpen = ref(false)
 
 const topAPs = computed(() => apStore.sortedAPs.slice(0, 10))
 
@@ -234,6 +246,35 @@ const handleExport = () => {
   const a = document.createElement('a')
   a.href = url; a.download = `marauder-session-${new Date().toISOString().slice(0, 10)}.json`
   a.click(); URL.revokeObjectURL(url)
+}
+
+const exportWigleAPs = () => {
+  wigleMenuOpen.value = false
+  const aps = Array.from(apStore.accessPoints.values())
+  if (aps.length === 0) { toastShow('No APs to export', 'warning'); return }
+  const csv = apsToWigle(aps)
+  const date = new Date().toISOString().slice(0, 10)
+  downloadWigle(`wigle-wifi-${date}.csv`, csv)
+  toastShow(`Exported ${aps.length} APs to Wigle CSV`, 'success')
+}
+
+const exportWigleBLE = () => {
+  wigleMenuOpen.value = false
+  const devs = Array.from(bleStore.devices.values())
+  if (devs.length === 0) { toastShow('No BLE devices to export', 'warning'); return }
+  const csv = bleToWigle(devs)
+  const date = new Date().toISOString().slice(0, 10)
+  downloadWigle(`wigle-ble-${date}.csv`, csv)
+  toastShow(`Exported ${devs.length} BLE devices to Wigle CSV`, 'success')
+}
+
+const exportWigleProbes = () => {
+  wigleMenuOpen.value = false
+  if (probeStore.probes.length === 0) { toastShow('No probes to export', 'warning'); return }
+  const csv = probesToWigle(probeStore.probes)
+  const date = new Date().toISOString().slice(0, 10)
+  downloadWigle(`wigle-probes-${date}.csv`, csv)
+  toastShow(`Exported ${probeStore.probes.length} probes to Wigle CSV`, 'success')
 }
 
 const handleImport = async (e) => {

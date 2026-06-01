@@ -1,5 +1,8 @@
 import { defineStore } from 'pinia'
-import { shallowRef, computed } from 'vue'
+import { shallowRef, computed, watch } from 'vue'
+import { debouncedSave, loadStore, clearPersistedStore } from '../utils/persist'
+
+const PERSIST_KEY = 'bleDevices'
 
 export const useBleStore = defineStore('ble', () => {
   const devices = shallowRef(new Map())
@@ -36,6 +39,7 @@ export const useBleStore = defineStore('ble', () => {
 
   function clearDevices() {
     devices.value = new Map()
+    clearPersistedStore(PERSIST_KEY)
   }
 
   const airtagCount = computed(() => {
@@ -44,8 +48,34 @@ export const useBleStore = defineStore('ble', () => {
     return count
   })
 
+  watch(devices, (map) => {
+    const items = []
+    for (const [key, dev] of map.entries()) {
+      items.push({ ...dev, mac: key })
+    }
+    debouncedSave(PERSIST_KEY, items)
+  }, { deep: false })
+
+  async function hydrate() {
+    const saved = await loadStore(PERSIST_KEY)
+    if (!saved || saved.length === 0) return
+    const newMap = new Map()
+    for (const dev of saved) {
+      const key = dev.mac || dev.id
+      if (!key) continue
+      const restored = {
+        ...dev,
+        firstSeen: dev.firstSeen ? new Date(dev.firstSeen) : new Date(),
+        lastSeen: dev.lastSeen ? new Date(dev.lastSeen) : new Date()
+      }
+      delete restored.id
+      newMap.set(key, restored)
+    }
+    devices.value = newMap
+  }
+
   return {
     devices, sortedDevices, deviceCount, airtagCount,
-    updateOrAddDevice, clearDevices
+    updateOrAddDevice, clearDevices, hydrate
   }
 })

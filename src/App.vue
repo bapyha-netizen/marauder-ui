@@ -160,11 +160,20 @@ const tabs = computed(() => [
   { id: 'help', label: 'Help', icon: '❓', badge: '' },
 ])
 
-onMounted(() => {
+onMounted(async () => {
   checkMobile()
   startParser()
   window.addEventListener('resize', checkMobile)
   window.addEventListener('beforeunload', sendStop)
+  try {
+    await Promise.all([
+      apStore.hydrate?.(),
+      bleStore.hydrate?.(),
+      probeStore.hydrate?.()
+    ])
+  } catch (e) {
+    console.warn('Hydrate failed:', e)
+  }
 })
 onUnmounted(() => {
   stopParser()

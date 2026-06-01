@@ -1,5 +1,8 @@
 import { defineStore } from 'pinia'
-import { shallowRef, triggerRef, computed } from 'vue'
+import { shallowRef, triggerRef, computed, watch } from 'vue'
+import { debouncedSave, loadStore, clearPersistedStore } from '../utils/persist'
+
+const PERSIST_KEY = 'accessPoints'
 
 export const useApStore = defineStore('ap', () => {
   const accessPoints = shallowRef(new Map())
@@ -122,6 +125,7 @@ export const useApStore = defineStore('ap', () => {
 
   function clearAPs() {
     accessPoints.value = new Map()
+    clearPersistedStore(PERSIST_KEY)
   }
 
   function clearSelected() {
@@ -175,10 +179,42 @@ export const useApStore = defineStore('ap', () => {
     return null
   }
 
+  watch(accessPoints, (map) => {
+    const items = []
+    for (const [key, ap] of map.entries()) {
+      items.push({ ...ap, bssid: key })
+    }
+    debouncedSave(PERSIST_KEY, items)
+  }, { deep: false })
+
+  async function hydrate() {
+    const saved = await loadStore(PERSIST_KEY)
+    if (!saved || saved.length === 0) return
+    const newMap = new Map()
+    for (const ap of saved) {
+      const key = ap.bssid || ap.id
+      if (!key) continue
+      const restored = { ...ap, lastSeen: ap.lastSeen ? new Date(ap.lastSeen) : new Date() }
+      if (restored.stations) {
+        restored.stations = restored.stations.map(s => ({
+          ...s,
+          lastSeen: s.lastSeen ? new Date(s.lastSeen) : new Date()
+        }))
+      }
+      if (restored.rssiHistory) {
+        restored.rssiHistory = [...restored.rssiHistory]
+      }
+      delete restored.id
+      newMap.set(key, restored)
+    }
+    accessPoints.value = newMap
+  }
+
   return {
     accessPoints, sortedAPs, apCount, totalStations,
     apByChannel, avgSignal,
     updateOrAddAP, addStation, clearAPs, clearSelected,
-    updateAP, removeOldAPs, exportData, findAPByBSSID
+    updateAP, removeOldAPs, exportData, findAPByBSSID,
+    hydrate
   }
 })

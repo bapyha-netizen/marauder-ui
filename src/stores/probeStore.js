@@ -1,5 +1,8 @@
 import { defineStore } from 'pinia'
-import { shallowRef, triggerRef, computed } from 'vue'
+import { shallowRef, triggerRef, computed, watch } from 'vue'
+import { debouncedSave, loadStore, clearPersistedStore } from '../utils/persist'
+
+const PERSIST_KEY = 'probes'
 
 export const useProbeStore = defineStore('probe', () => {
   const probes = shallowRef([])
@@ -26,7 +29,34 @@ export const useProbeStore = defineStore('probe', () => {
 
   function clearProbes() {
     probes.value = []
+    clearPersistedStore(PERSIST_KEY)
   }
 
-  return { probes, reversedProbes, probeCount, uniqueClients, addProbe, clearProbes }
+  let _probeCounter = 0
+  watch(probes, (arr) => {
+    const items = arr.map((p, idx) => ({
+      id: `${p.clientMac}-${p.time?.getTime?.() || idx}`,
+      rssi: p.rssi,
+      ch: p.ch,
+      clientMac: p.clientMac,
+      ssid: p.ssid,
+      time: p.time
+    }))
+    debouncedSave(PERSIST_KEY, items)
+  }, { deep: false })
+
+  async function hydrate() {
+    const saved = await loadStore(PERSIST_KEY)
+    if (!saved || saved.length === 0) return
+    const restored = saved.map(p => ({
+      rssi: p.rssi,
+      ch: p.ch,
+      clientMac: p.clientMac,
+      ssid: p.ssid,
+      time: p.time ? new Date(p.time) : new Date()
+    }))
+    probes.value = restored.slice(-500)
+  }
+
+  return { probes, reversedProbes, probeCount, uniqueClients, addProbe, clearProbes, hydrate }
 })
