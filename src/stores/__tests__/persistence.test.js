@@ -136,5 +136,20 @@ describe('store persistence', () => {
       await probeStore2.hydrate()
       expect(probeStore2.probes.length).toBeLessThanOrEqual(500)
     })
+
+    it('merge hydrate preserves in-memory probes', async () => {
+      const probeStore1 = useProbeStore()
+      probeStore1.addProbe(-55, 6, 'AA:BB:CC:11:22:33', 'Old')
+      await wait(1100)
+
+      _resetDbPromise()
+      setActivePinia(createPinia())
+      const probeStore2 = useProbeStore()
+      probeStore2.addProbe(-70, 1, 'DD:EE:FF:11:22:33', 'New')
+      await probeStore2.hydrate()
+      expect(probeStore2.probes.length).toBe(2)
+      const ssids = probeStore2.probes.map(p => p.ssid).sort()
+      expect(ssids).toEqual(['New', 'Old'])
+    })
   })
 })

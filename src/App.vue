@@ -155,8 +155,10 @@ const demoInterval = ref(null)
 let lastLength = 0
 
 const checkMobile = () => {
+  const hasSerial = 'serial' in navigator
   const ua = navigator.userAgent
-  isMobile.value = (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) || window.innerWidth < 768
+  const isMobileUA = /Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
+  isMobile.value = !hasSerial && (isMobileUA || window.innerWidth < 768)
 }
 
 const tabs = computed(() => [
@@ -170,18 +172,18 @@ const tabs = computed(() => [
 
 onMounted(async () => {
   checkMobile()
-  startParser()
   window.addEventListener('resize', checkMobile)
   window.addEventListener('beforeunload', sendStop)
   try {
     await Promise.all([
-      apStore.hydrate?.(),
-      bleStore.hydrate?.(),
-      probeStore.hydrate?.()
+      apStore.hydrate(),
+      bleStore.hydrate(),
+      probeStore.hydrate()
     ])
   } catch (e) {
     console.warn('Hydrate failed:', e)
   }
+  startParser()
 })
 onUnmounted(() => {
   stopParser()

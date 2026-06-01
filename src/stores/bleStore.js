@@ -59,19 +59,21 @@ export const useBleStore = defineStore('ble', () => {
   async function hydrate() {
     const saved = await loadStore(PERSIST_KEY)
     if (!saved || saved.length === 0) return
-    const newMap = new Map()
+    const existing = devices.value
+    const merged = existing.size > 0 ? new Map(existing) : new Map()
     for (const dev of saved) {
       const key = dev.mac || dev.id
       if (!key) continue
+      if (merged.has(key)) continue
       const restored = {
         ...dev,
         firstSeen: dev.firstSeen ? new Date(dev.firstSeen) : new Date(),
         lastSeen: dev.lastSeen ? new Date(dev.lastSeen) : new Date()
       }
       delete restored.id
-      newMap.set(key, restored)
+      merged.set(key, restored)
     }
-    devices.value = newMap
+    devices.value = merged
   }
 
   return {

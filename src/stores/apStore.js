@@ -190,10 +190,13 @@ export const useApStore = defineStore('ap', () => {
   async function hydrate() {
     const saved = await loadStore(PERSIST_KEY)
     if (!saved || saved.length === 0) return
-    const newMap = new Map()
+    const existing = accessPoints.value
+    const hasExisting = existing.size > 0
+    const merged = hasExisting ? new Map(existing) : new Map()
     for (const ap of saved) {
       const key = ap.bssid || ap.id
       if (!key) continue
+      if (merged.has(key)) continue
       const restored = { ...ap, lastSeen: ap.lastSeen ? new Date(ap.lastSeen) : new Date() }
       if (restored.stations) {
         restored.stations = restored.stations.map(s => ({
@@ -205,9 +208,9 @@ export const useApStore = defineStore('ap', () => {
         restored.rssiHistory = [...restored.rssiHistory]
       }
       delete restored.id
-      newMap.set(key, restored)
+      merged.set(key, restored)
     }
-    accessPoints.value = newMap
+    accessPoints.value = merged
   }
 
   return {
