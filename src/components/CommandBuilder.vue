@@ -4,12 +4,16 @@
       <template v-for="group in COMMAND_GROUPS" :key="group.name">
         <div class="flex flex-wrap gap-x-0.5 gap-y-0.5 items-baseline px-2 py-1.5 rounded-lg bg-slate-800/20">
           <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mr-1 flex-shrink-0">{{ group.nameRu }}</span>
-          <button v-for="cmd in group.commands" :key="cmd.command" @click="send(cmd.command)"
+          <button v-for="cmd in group.commands" :key="cmd.command" @click="send(cmd)"
             @mouseenter="showTip($event, cmd)" @mouseleave="hideTip"
-            class="flex items-center space-x-0.5 px-1.5 py-0.5 text-xs font-medium rounded-md transition-all duration-150 whitespace-nowrap"
+            :disabled="!cmdState(cmd).canRun"
+            :title="cmdState(cmd).tooltip"
+            class="flex items-center space-x-0.5 px-1.5 py-0.5 text-xs font-medium rounded-md transition-all duration-150 whitespace-nowrap disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
             :class="btnClass(cmd)">
             <span>{{ cmd.icon }}</span>
             <span class="hidden sm:inline">{{ cmd.label }}</span>
+            <span v-if="cmdState(cmd).badge" class="text-[9px] font-bold px-1 rounded"
+              :class="cmdState(cmd).badgeClass">!</span>
           </button>
         </div>
       </template>
@@ -29,9 +33,16 @@
         <div class="font-semibold text-base mb-1.5 flex items-center space-x-2">
           <span>{{ tooltipCmd.icon }}</span>
           <span>{{ tooltipCmd.label }}</span>
+          <span v-if="cmdState(tooltipCmd).severity" class="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase"
+            :class="severityBadgeClass(cmdState(tooltipCmd).severity)">
+            {{ cmdState(tooltipCmd).severity }}
+          </span>
         </div>
         <div class="text-xs leading-relaxed opacity-90">{{ tooltipCmd.ru }}</div>
         <div class="mt-2 text-[11px] font-mono px-2 py-1 rounded inline-block opacity-60 bg-slate-800/50">{{ tooltipCmd.command }}</div>
+        <div v-if="!cmdState(tooltipCmd).canRun" class="mt-2 text-[11px] px-2 py-1.5 rounded bg-red-500/20 text-red-200 border border-red-500/30">
+          ⚠ {{ cmdState(tooltipCmd).tooltip }}
+        </div>
       </div>
     </Teleport>
 
@@ -56,17 +67,35 @@
         </div>
       </div>
     </Teleport>
+
+    <ConfirmDialog :show="confirmDialog.show"
+      :title="confirmDialog.title"
+      :body="confirmDialog.body"
+      :cmd="confirmDialog.cmd"
+      :target="confirmDialog.target"
+      :icon="confirmDialog.icon"
+      :severity="confirmDialog.severity"
+      :confirm-label="confirmDialog.confirmLabel"
+      @confirm="onConfirm"
+      @cancel="onCancelConfirm" />
   </div>
 </template>
 
 <script setup>
-import { ref, onUnmounted } from 'vue'
+import { ref, onUnmounted, reactive, watch } from 'vue'
 import { useSerialStore } from '../stores/serialStore'
 import { useDashboardStore } from '../stores/dashboardStore'
+import { useApStore } from '../stores/apStore'
+import { useBleStore } from '../stores/bleStore'
 import { COMMAND_GROUPS } from '../services/commandRegistry'
+import { getCommandMeta, SEVERITY, SEVERITY_META } from '../services/commandMeta'
+import { runAction, getPrereqState, shouldConfirm } from '../utils/actionDispatcher'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 const serialStore = useSerialStore()
 const dashStore = useDashboardStore()
+const apStore = useApStore()
+const bleStore = useBleStore()
 const custom = ref('')
 
 const tooltipCmd = ref(null)
@@ -76,6 +105,18 @@ let tipTimer = null
 const promptModal = ref(null)
 const promptValues = ref([])
 let promptResolve = null
+
+const confirmDialog = reactive({
+  show: false,
+  title: '',
+  body: '',
+  cmd: '',
+  target: '',
+  icon: '',
+  severity: SEVERITY.HIGH,
+  confirmLabel: 'Run',
+  pendingPayload: null
+})
 
 const PROMPT_RULES = [
   { re: /^select -a (\d+)$/, fields: [{ label: 'AP index', placeholder: '0' }], build: (v) => 'select -a ' + v },
@@ -92,6 +133,30 @@ const PROMPT_RULES = [
   { re: /^led -s (#[0-9A-F]+)$/i, fields: [{ label: 'Hex color', placeholder: '#FF0000' }], build: (v) => 'led -s ' + v },
   { re: /^brightness -s (\d+)$/, fields: [{ label: 'Brightness (0-9)', placeholder: '5' }], build: (v) => 'brightness -s ' + v },
 ]
+
+const cmdStateCache = new Map()
+function cmdState(cmd) {
+  const cacheKey = cmd.command
+  if (cmdStateCache.has(cacheKey)) return cmdStateCache.get(cacheKey)
+  const meta = getCommandMeta(cmd.command)
+  const prereq = getPrereqState(cmd.command)
+  const state = {
+    canRun: prereq.ok && serialStore.isConnected,
+    tooltip: !serialStore.isConnected
+      ? 'Connect to device first'
+      : !prereq.ok
+        ? prereq.reason
+        : prereq.hint || meta?.resultHint || 'Run command',
+    severity: meta?.severity || SEVERITY.INFO,
+    badge: meta?.severity === SEVERITY.CRITICAL || meta?.destructive,
+    badgeClass: meta?.destructive ? 'bg-red-500/30 text-red-200' : 'bg-orange-500/30 text-orange-200'
+  }
+  cmdStateCache.set(cacheKey, state)
+  return state
+}
+watch([() => serialStore.isConnected, () => apStore.sortedAPs, () => bleStore.sortedDevices], () => {
+  cmdStateCache.clear()
+}, { deep: true })
 
 const resolveCommand = (cmd) => {
   return new Promise((resolve) => {
@@ -128,18 +193,121 @@ const cancelPrompt = () => {
   }
 }
 
-const send = async (cmd) => {
-  const resolved = await resolveCommand(cmd)
-  if (resolved === null) return
-  serialStore.sendCommand(resolved)
-  dashStore.incrementCommands()
+const showConfirmForPayload = (payload) => {
+  const meta = getCommandMeta(payload.cmd)
+  confirmDialog.show = true
+  confirmDialog.title = `${payload.label} — подтвердите действие`
+  confirmDialog.body = meta?.destructive
+    ? [
+        'Эта команда выполняет деструктивное действие на ESP32.',
+        'Устройство может перейти в режим передачи и будет видно в эфире.',
+        'Убедитесь, что у вас есть разрешение на тестирование этих сетей.'
+      ]
+    : ['Команда изменит состояние ESP32.', 'Продолжить?']
+  confirmDialog.cmd = payload.cmd
+  confirmDialog.target = payload.target
+  confirmDialog.icon = meta?.destructive ? '⚠' : '?'
+  confirmDialog.severity = meta?.severity || SEVERITY.HIGH
+  confirmDialog.confirmLabel = payload.label
+  confirmDialog.pendingPayload = payload
 }
-const sendCustom = () => { if (custom.value.trim()) { send(custom.value); custom.value = '' } }
+
+const executePayload = async (payload) => {
+  try {
+    const result = await runAction({
+      cmd: payload.cmd,
+      label: payload.label,
+      icon: payload.icon,
+      target: payload.target,
+      options: { confirm: false }
+    })
+    if (result?.needsConfirm) {
+      showConfirmForPayload(result)
+      return
+    }
+    dashStore.incrementCommands()
+  } catch (e) {
+    const { useToast } = await import('../utils/toast')
+    const { show: toastShow } = useToast()
+    if (e.code === 'PREREQ_FAILED') {
+      toastShow(`Cannot run: ${e.message}${e.hint ? ' — ' + e.hint : ''}`, 'error')
+    } else {
+      toastShow(`Failed: ${e.message}`, 'error')
+    }
+  }
+}
+
+const send = async (cmdObj) => {
+  if (!serialStore.isConnected) {
+    const { useToast } = await import('../utils/toast')
+    const { show: toastShow } = useToast()
+    toastShow('Connect to ESP32 first', 'warning')
+    return
+  }
+  const resolved = await resolveCommand(cmdObj.command)
+  if (resolved === null) return
+  const meta = getCommandMeta(resolved)
+  const prereq = getPrereqState(resolved)
+  if (!prereq.ok) {
+    const { useToast } = await import('../utils/toast')
+    const { show: toastShow } = useToast()
+    toastShow(`${prereq.reason}${prereq.hint ? ' — ' + prereq.hint : ''}`, 'error')
+    return
+  }
+  const payload = { cmd: resolved, label: cmdObj.label, icon: cmdObj.icon, target: '' }
+  if (shouldConfirm(resolved)) {
+    showConfirmForPayload(payload)
+    return
+  }
+  await executePayload(payload)
+}
+
+const onConfirm = async () => {
+  const payload = confirmDialog.pendingPayload
+  confirmDialog.show = false
+  confirmDialog.pendingPayload = null
+  if (payload) await executePayload(payload)
+}
+
+const onCancelConfirm = () => {
+  confirmDialog.show = false
+  confirmDialog.pendingPayload = null
+}
+
+const sendCustom = () => {
+  if (custom.value.trim()) {
+    send({ command: custom.value.trim(), label: custom.value.trim(), icon: '⌨' })
+    custom.value = ''
+  }
+}
 
 const btnClass = (cmd) => {
-  if (cmd.warning) return 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
-  if (cmd.color === 'red') return 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
+  const state = cmdState(cmd)
+  const meta = getCommandMeta(cmd.command)
+  if (state.severity === SEVERITY.CRITICAL || meta?.destructive) {
+    return 'bg-red-500/15 text-red-300 hover:bg-red-500/25'
+  }
+  if (cmd.warning || state.severity === SEVERITY.HIGH) {
+    return 'bg-orange-500/15 text-orange-300 hover:bg-orange-500/25'
+  }
+  if (state.severity === SEVERITY.MEDIUM) {
+    return 'bg-yellow-500/15 text-yellow-300 hover:bg-yellow-500/25'
+  }
+  if (state.severity === SEVERITY.LOW) {
+    return 'bg-blue-500/15 text-blue-300 hover:bg-blue-500/25'
+  }
   return 'bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25'
+}
+
+const severityBadgeClass = (sev) => {
+  const meta = SEVERITY_META[sev]
+  switch (sev) {
+    case SEVERITY.CRITICAL: return 'bg-red-500/30 text-red-200'
+    case SEVERITY.HIGH:     return 'bg-orange-500/30 text-orange-200'
+    case SEVERITY.MEDIUM:   return 'bg-yellow-500/30 text-yellow-200'
+    case SEVERITY.LOW:      return 'bg-blue-500/30 text-blue-200'
+    default:                return 'bg-slate-500/30 text-slate-300'
+  }
 }
 
 const showTip = (e, cmd) => {

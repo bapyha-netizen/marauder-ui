@@ -1,9 +1,9 @@
 <template>
   <div class="h-full flex gap-3">
-    <!-- Left: Real-time terminal (1/3) -->
-    <div class="w-1/3 flex flex-col min-h-0 min-w-0">
+    <!-- LEFT: Live Output (1/4) -->
+    <div class="w-1/4 flex flex-col min-h-0 min-w-0">
       <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 flex flex-col h-full">
-        <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700/50">
+        <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700/50 flex-shrink-0">
           <div class="flex items-center space-x-2">
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Live Output</h3>
@@ -18,8 +18,7 @@
             </button>
             <button @click="autoScroll = !autoScroll"
               :class="!autoScroll ? 'bg-amber-600/50 text-amber-200' : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'"
-              class="px-1.5 py-0.5 text-[10px] rounded-md transition-colors"
-              :title="autoScroll ? 'Auto-scroll enabled' : 'Auto-scroll disabled'">
+              class="px-1.5 py-0.5 text-[10px] rounded-md transition-colors">
               {{ autoScroll ? '⤓ Auto' : '⊘ Manual' }}
             </button>
             <button @click="copyTerminal" v-if="serialStore.terminalOutput.length"
@@ -39,139 +38,231 @@
       </div>
     </div>
 
-    <!-- Right: Main dashboard (2/3) -->
-    <div class="w-2/3 flex flex-col gap-3 min-h-0 min-w-0">
-      <!-- Stats cards -->
-      <div class="grid grid-cols-4 gap-3 flex-shrink-0">
-        <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-3">
-          <div class="flex items-center justify-between">
-            <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">APs</span>
-            <span class="text-2xl font-bold text-indigo-400">{{ apStore.apCount }}</span>
+    <!-- CENTER: Targets list (1/4) -->
+    <div class="w-1/4 flex flex-col min-h-0 min-w-0">
+      <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 flex flex-col h-full">
+        <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700/50 flex-shrink-0">
+          <div class="flex items-center space-x-1">
+            <button v-for="t in targetTabs" :key="t.id" @click="activeTab = t.id"
+              :class="activeTab === t.id ? 'bg-indigo-600/30 text-indigo-200 border-indigo-500/50' : 'bg-slate-700/30 text-slate-400 border-transparent hover:text-slate-200'"
+              class="px-2.5 py-1 text-[11px] font-medium rounded-md border transition-colors flex items-center space-x-1">
+              <span>{{ t.icon }}</span>
+              <span>{{ t.label }}</span>
+              <span v-if="t.count" class="text-[9px] px-1 rounded bg-white/10 font-semibold">{{ t.count }}</span>
+            </button>
           </div>
+          <button @click="runScanForTab" class="px-2 py-1 text-[10px] font-medium rounded-md bg-emerald-600/30 text-emerald-200 hover:bg-emerald-600/50 border border-emerald-500/50 transition-colors"
+            :title="`Run scan for ${activeTabLabel}`">
+            ▶ Scan
+          </button>
         </div>
-        <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-3">
-          <div class="flex items-center justify-between">
-            <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Stations</span>
-            <span class="text-2xl font-bold text-cyan-400">{{ apStore.totalStations }}</span>
-          </div>
-        </div>
-        <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-3">
-          <div class="flex items-center justify-between">
-            <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">BLE</span>
-            <span class="text-2xl font-bold text-emerald-400">{{ bleStore.deviceCount }}</span>
-          </div>
-        </div>
-        <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-3">
-          <div class="flex items-center justify-between">
-            <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Pkts</span>
-            <span class="text-2xl font-bold text-amber-400">{{ dashStore.packetsCaptured }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Dashboard panels -->
-      <div class="grid grid-cols-3 gap-3 flex-1 min-h-0">
-        <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-3 flex flex-col min-h-0">
-          <h3 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Top APs</h3>
-          <div class="flex-1 overflow-y-auto space-y-1 scrollbar-thin">
-            <div v-for="ap in topAPs" :key="ap.bssid"
-              class="flex items-center space-x-2 p-1.5 rounded-lg bg-slate-700/30 hover:bg-slate-700/50 transition-colors">
-              <div class="w-1.5 h-1.5 rounded-full flex-shrink-0" :class="dotClass(ap.rssi)"></div>
+        <div class="flex-1 overflow-y-auto p-2 scrollbar-thin">
+          <!-- AP list -->
+          <template v-if="activeTab === 'ap'">
+            <div v-if="!apStore.sortedAPs.length" class="text-center py-12 text-xs text-slate-600">
+              <div class="text-2xl mb-2">📡</div>
+              <div>No APs yet</div>
+              <button @click="serialStore.scanAll()" class="mt-2 text-indigo-400 hover:text-indigo-300">Run scanall</button>
+            </div>
+            <button v-for="ap in apStore.sortedAPs" :key="ap.bssid" @click="selectAP(ap)"
+              :class="selectedAP?.bssid === ap.bssid ? 'bg-indigo-600/20 border-indigo-500/50' : 'bg-slate-700/20 border-transparent hover:bg-slate-700/40'"
+              class="w-full text-left p-2 mb-1 rounded-lg border transition-colors flex items-center space-x-2">
+              <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(ap.rssi)"></div>
               <div class="flex-1 min-w-0">
-                <div class="text-xs font-medium text-slate-200 truncate">{{ ap.essid }}</div>
-                <div class="text-[10px] text-slate-500">CH {{ ap.channel }}</div>
-              </div>
-              <div class="text-xs font-mono font-semibold" :class="signalClass(ap.rssi)">{{ ap.rssi }}</div>
-            </div>
-            <div v-if="!topAPs.length" class="text-xs text-slate-600 text-center py-6">No APs yet.</div>
-          </div>
-        </div>
-
-        <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-3 flex flex-col min-h-0">
-          <h3 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
-            <span>Packet Breakdown</span>
-            <span v-if="!totalPackets" class="text-[10px] text-slate-600 font-normal">Run packetcount</span>
-          </h3>
-          <div class="flex-1 flex flex-col gap-2">
-            <div v-if="totalPackets" class="flex justify-center py-1">
-              <svg width="64" height="64" viewBox="0 0 64 64" class="flex-shrink-0">
-                <circle cx="32" cy="32" r="30" fill="none" stroke="rgb(51 65 85)" stroke-width="2"/>
-                <path v-for="(slice, i) in pieSlices" :key="i" :d="slice.d" :fill="slice.fill" stroke="rgb(15 23 42)" stroke-width="1"/>
-              </svg>
-            </div>
-            <div class="flex-1 space-y-2 overflow-y-auto">
-              <div v-for="pk in packetTypes" :key="pk.key" class="space-y-0.5">
-                <div class="flex items-center justify-between text-[11px]">
-                  <span class="text-slate-400">{{ pk.label }}</span>
-                  <span class="font-mono text-slate-300">{{ dashStore.packetCounts[pk.key] }}</span>
+                <div class="text-xs font-medium text-slate-100 truncate flex items-center space-x-1.5">
+                  <span class="truncate">{{ ap.essid || '(hidden)' }}</span>
+                  <span v-if="ap.isSelected" class="badge-green flex-shrink-0">sel</span>
                 </div>
-                <div class="w-full h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
-                  <div class="h-full rounded-full transition-all duration-300" :style="{ width: (totalPackets ? (dashStore.packetCounts[pk.key] / totalPackets * 100) : 0) + '%' }" :class="pk.color"></div>
+                <div class="text-[10px] text-slate-500 font-mono truncate">{{ ap.bssid }} · CH{{ ap.channel }}</div>
+              </div>
+              <div class="text-[11px] font-mono font-semibold flex-shrink-0" :class="signalClass(ap.rssi)">
+                {{ ap.rssi ?? 'N/A' }}
+              </div>
+            </button>
+          </template>
+          <!-- BLE list -->
+          <template v-else-if="activeTab === 'ble'">
+            <div v-if="!bleStore.sortedDevices.length" class="text-center py-12 text-xs text-slate-600">
+              <div class="text-2xl mb-2">🔵</div>
+              <div>No BLE devices</div>
+              <button @click="serialStore.sendCommand('sniffbt')" class="mt-2 text-indigo-400 hover:text-indigo-300">Run sniffbt</button>
+            </div>
+            <button v-for="dev in bleStore.sortedDevices" :key="dev.mac" @click="selectBLE(dev)"
+              :class="selectedBLE?.mac === dev.mac ? 'bg-indigo-600/20 border-indigo-500/50' : 'bg-slate-700/20 border-transparent hover:bg-slate-700/40'"
+              class="w-full text-left p-2 mb-1 rounded-lg border transition-colors flex items-center space-x-2">
+              <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(dev.rssi)"></div>
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-medium text-slate-100 truncate flex items-center space-x-1.5">
+                  <span class="truncate">{{ dev.name || 'Unknown' }}</span>
+                  <span v-if="dev.isAirtag" class="text-[9px] px-1 rounded bg-pink-500/20 text-pink-300 flex-shrink-0">airtag</span>
+                </div>
+                <div class="text-[10px] text-slate-500 font-mono truncate">{{ dev.mac }}</div>
+              </div>
+              <div class="text-[11px] font-mono font-semibold flex-shrink-0" :class="signalClass(dev.rssi)">
+                {{ dev.rssi ?? 'N/A' }}
+              </div>
+            </button>
+          </template>
+          <!-- Probes list -->
+          <template v-else-if="activeTab === 'probes'">
+            <div v-if="!probeStore.probes.length" class="text-center py-12 text-xs text-slate-600">
+              <div class="text-2xl mb-2">📱</div>
+              <div>No probes</div>
+              <button @click="serialStore.sendCommand('sniffprobe')" class="mt-2 text-indigo-400 hover:text-indigo-300">Run sniffprobe</button>
+            </div>
+            <div v-for="(p, i) in probeStore.reversedProbes" :key="i"
+              class="p-2 mb-1 rounded-lg bg-slate-700/20 hover:bg-slate-700/40 transition-colors">
+              <div class="flex items-center space-x-2">
+                <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(p.rssi)"></div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs font-medium text-slate-100 truncate">{{ p.ssid || '(no SSID)' }}</div>
+                  <div class="text-[10px] text-slate-500 font-mono truncate">{{ p.clientMac }} · CH{{ p.ch }}</div>
+                </div>
+                <div class="text-[11px] font-mono font-semibold flex-shrink-0" :class="signalClass(p.rssi)">
+                  {{ p.rssi ?? 'N/A' }}
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-
-        <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-3 flex flex-col min-h-0">
-          <h3 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
-            <span>Channel Utilization</span>
-            <span v-if="!chs.length" class="text-[10px] text-slate-600 font-normal">Run channelanalyzer</span>
-          </h3>
-          <div class="flex-1 space-y-1 overflow-y-auto">
-            <div v-for="ch in chs" :key="ch.ch" class="flex items-center space-x-2 text-[11px]">
-              <span class="text-slate-500 w-4 font-mono">#{{ ch.ch }}</span>
-              <div class="flex-1 h-2 rounded-full bg-slate-700/50 overflow-hidden">
-                <div class="h-full rounded-full transition-all duration-300 bg-indigo-400" :style="{ width: (ch.count / maxChUtil * 100) + '%' }"></div>
+          </template>
+          <!-- Stations list (from selected AP) -->
+          <template v-else-if="activeTab === 'stations'">
+            <div v-if="!selectedAP" class="text-center py-12 text-xs text-slate-600">
+              <div class="text-2xl mb-2">📱</div>
+              <div>Select an AP first</div>
+            </div>
+            <div v-else-if="!selectedAP.stations?.length" class="text-center py-12 text-xs text-slate-600">
+              <div class="text-2xl mb-2">📭</div>
+              <div>No stations on {{ selectedAP.essid }}</div>
+              <button @click="serialStore.sendCommand('sniffbeacon')" class="mt-2 text-indigo-400 hover:text-indigo-300">Run sniffbeacon</button>
+            </div>
+            <div v-for="sta in (selectedAP?.stations || [])" :key="sta.mac"
+              class="p-2 mb-1 rounded-lg bg-slate-700/20 hover:bg-slate-700/40 transition-colors flex items-center space-x-2">
+              <div class="w-2 h-2 rounded-full flex-shrink-0 bg-cyan-400"></div>
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-mono text-slate-100 truncate">{{ sta.mac }}</div>
+                <div v-if="sta.vendor" class="text-[10px] text-slate-500">{{ sta.vendor }}</div>
               </div>
-              <span class="font-mono text-slate-400 w-8 text-right">{{ ch.count }}</span>
+              <div class="text-[10px] text-slate-500">{{ fmtTimeRelative(sta.lastSeen) }}</div>
             </div>
-            <div v-if="!chs.length" class="flex items-center justify-center py-4 text-xs text-slate-600">
-              No channel data yet
-            </div>
-          </div>
+          </template>
         </div>
       </div>
+    </div>
 
-      <!-- Bottom bar -->
-      <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-2 flex-shrink-0">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center space-x-4 text-[11px]">
-            <span class="text-slate-500">Avg: <span class="font-semibold" :class="signalClass(apStore.avgSignal)">{{ apStore.avgSignal }} dBm</span></span>
-            <span class="text-slate-500">Session: <span class="font-semibold text-slate-200">{{ dashStore.sessionDuration }}</span></span>
-          </div>
-          <div class="flex space-x-2">
-            <button @click="serialStore.clearListAndScan()" class="btn-primary btn-sm">Clear & Scan</button>
-            <button @click="handleClear" class="btn-ghost btn-sm">Clear All</button>
-            <button @click="handleExport" class="btn-ghost btn-sm" title="Export session as JSON">Export</button>
-            <button @click="importRef?.click()" class="btn-ghost btn-sm" title="Import session from JSON">Import</button>
-            <input ref="importRef" type="file" accept=".json" @change="handleImport" class="hidden">
-            <div class="relative" v-if="apStore.apCount > 0 || bleStore.deviceCount > 0 || probeStore.probeCount > 0">
-              <button @click="wigleMenuOpen = !wigleMenuOpen" class="btn-ghost btn-sm" title="Export to Wigle.net format">Wigle ▾</button>
-              <div v-if="wigleMenuOpen" class="absolute right-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl z-20 py-1" @click.stop>
-                <button @click="exportWigleAPs" class="block w-full text-left px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-700">WiFi APs → Wigle CSV</button>
-                <button @click="exportWigleBLE" class="block w-full text-left px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-700">BLE → Wigle CSV</button>
-                <button @click="exportWigleProbes" class="block w-full text-left px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-700">Probes → Wigle CSV</button>
+    <!-- RIGHT: Action panel (1/2) -->
+    <div class="w-1/2 flex flex-col min-h-0 min-w-0 gap-3">
+      <!-- Top: Selected target details + actions -->
+      <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-3 flex-shrink-0">
+        <div v-if="!selectedTarget" class="text-center py-6 text-xs text-slate-600">
+          <div class="text-2xl mb-2">🎯</div>
+          <div>Select a target from the list to see available actions</div>
+          <div class="mt-2 text-[10px] text-slate-700">or run a scan from the tab buttons above</div>
+        </div>
+        <template v-else>
+          <div class="flex items-start justify-between mb-2">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center space-x-2 mb-1">
+                <span class="text-base">{{ selectedTarget.icon }}</span>
+                <h3 class="text-sm font-semibold text-slate-100 truncate">{{ selectedTarget.name }}</h3>
+                <span v-if="selectedTarget.subtitle" class="text-[11px] text-slate-500 font-mono truncate">{{ selectedTarget.subtitle }}</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 text-[10px]">
+                <span v-if="selectedTarget.ch" class="px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-300">CH {{ selectedTarget.ch }}</span>
+                <span v-if="selectedTarget.rssi != null" class="px-1.5 py-0.5 rounded font-mono font-semibold" :class="signalClass(selectedTarget.rssi)">
+                  {{ selectedTarget.rssi }} dBm
+                </span>
+                <span v-if="selectedTarget.enc" class="px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-300">{{ selectedTarget.enc }}</span>
+                <span v-if="selectedTarget.stationCount" class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">{{ selectedTarget.stationCount }} stations</span>
+                <span v-if="selectedTarget.vendor" class="px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400">{{ selectedTarget.vendor }}</span>
               </div>
             </div>
+            <button @click="clearSelection" class="text-slate-500 hover:text-slate-200 text-lg flex-shrink-0 ml-2" title="Clear selection">✕</button>
+          </div>
+          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 mt-2">Actions</div>
+          <div class="flex flex-wrap gap-1.5">
+            <button v-for="action in availableActions" :key="action.key" @click="runActionLocal(action)"
+              :disabled="!actionState(action).canRun"
+              :class="actionBtnClass(action)"
+              :title="actionState(action).tooltip"
+              class="px-2.5 py-1.5 text-[11px] font-medium rounded-md border transition-colors flex items-center space-x-1 disabled:opacity-40 disabled:cursor-not-allowed">
+              <span>{{ action.icon }}</span>
+              <span>{{ action.label }}</span>
+            </button>
+            <div v-if="!availableActions.length" class="text-[10px] text-slate-600">No actions for this target</div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Bottom: Action log / results -->
+      <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 flex flex-col flex-1 min-h-0">
+        <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700/50 flex-shrink-0">
+          <div class="flex items-center space-x-2">
+            <span class="w-2 h-2 rounded-full" :class="actionRunning ? 'bg-amber-400 animate-pulse' : 'bg-slate-600'"></span>
+            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Action Log</h3>
+            <span v-if="actionRunning" class="text-[10px] text-amber-300 font-medium">{{ actionRunning.label }}...</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span class="text-[11px] text-slate-500">{{ actions.length }} action{{ actions.length === 1 ? '' : 's' }}</span>
+            <button @click="actions = []" v-if="actions.length"
+              class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors">Clear</button>
+          </div>
+        </div>
+        <div ref="actionLogRef" class="flex-1 overflow-y-auto p-2 space-y-1.5 scrollbar-thin">
+          <div v-if="!actions.length && !actionRunning" class="text-center py-8 text-xs text-slate-600">
+            <div class="text-2xl mb-2">📋</div>
+            <div>No actions yet</div>
+            <div class="text-[10px] text-slate-700 mt-1">Select a target and click an action to begin</div>
+          </div>
+          <div v-for="act in actions" :key="act.id"
+            :class="act.status === 'running' ? 'border-amber-500/50 bg-amber-500/5' : act.status === 'error' ? 'border-red-500/50 bg-red-500/5' : act.status === 'success' ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-slate-700/50 bg-slate-700/10'"
+            class="border rounded-lg p-2 text-[11px]">
+            <div class="flex items-center justify-between mb-1">
+              <div class="flex items-center space-x-1.5 min-w-0 flex-1">
+                <span class="flex-shrink-0">{{ act.icon }}</span>
+                <span class="font-semibold text-slate-200 truncate">{{ act.label }}</span>
+                <span class="text-slate-500 font-mono text-[10px] truncate">{{ act.target }}</span>
+              </div>
+              <div class="flex items-center space-x-2 flex-shrink-0">
+                <span class="text-[10px] text-slate-500">{{ fmtTimeHM(act.time) }}</span>
+                <span :class="act.status === 'running' ? 'text-amber-300' : act.status === 'error' ? 'text-red-300' : act.status === 'success' ? 'text-emerald-300' : 'text-slate-400'">
+                  {{ act.status === 'running' ? '⏳' : act.status === 'error' ? '✕' : act.status === 'success' ? '✓' : '·' }}
+                </span>
+              </div>
+            </div>
+            <div class="font-mono text-[10px] text-slate-400 break-all">{{ act.cmd }}</div>
+            <div v-if="act.result" class="font-mono text-[10px] text-slate-500 mt-1 whitespace-pre-wrap break-all line-clamp-6">{{ act.result }}</div>
           </div>
         </div>
       </div>
     </div>
+
+    <ConfirmDialog :show="confirmDialog.show"
+      :title="confirmDialog.title"
+      :body="confirmDialog.body"
+      :cmd="confirmDialog.cmd"
+      :target="confirmDialog.target"
+      :icon="confirmDialog.icon"
+      :severity="confirmDialog.severity"
+      :confirm-label="confirmDialog.confirmLabel"
+      @confirm="onConfirmAction"
+      @cancel="onCancelConfirm" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, reactive } from 'vue'
 import { useSerialStore } from '../../stores/serialStore'
 import { useApStore } from '../../stores/apStore'
 import { useBleStore } from '../../stores/bleStore'
 import { useDashboardStore } from '../../stores/dashboardStore'
 import { useProbeStore } from '../../stores/probeStore'
-import { signalClass, dotClass } from '../../utils/format'
+import { signalClass, dotClass, fmtTimeRelative, fmtTimeHM } from '../../utils/format'
 import { useToast } from '../../utils/toast'
-import { apsToWigle, bleToWigle, probesToWigle, downloadWigle } from '../../utils/wigle'
 import { copyToClipboard } from '../../utils/clipboard'
+import { runAction, actions as dispatcherActions, runningAction as dispatcherRunning } from '../../utils/actionDispatcher'
+import { getCommandMeta, SEVERITY } from '../../services/commandMeta'
+import ConfirmDialog from '../ConfirmDialog.vue'
+import { SEVERITY_META } from '../../services/commandMeta'
 
 const { show: toastShow } = useToast()
 
@@ -182,48 +273,250 @@ const dashStore = useDashboardStore()
 const probeStore = useProbeStore()
 
 const liveRef = ref(null)
-const wigleMenuOpen = ref(false)
+const actionLogRef = ref(null)
 const paused = ref(false)
 const autoScroll = ref(true)
+const activeTab = ref('ap')
+const selectedAP = ref(null)
+const selectedBLE = ref(null)
+const actions = dispatcherActions
+const actionRunning = dispatcherRunning
 
-const topAPs = computed(() => apStore.sortedAPs.slice(0, 10))
+const targetTabs = computed(() => [
+  { id: 'ap', label: 'APs', icon: '📶', count: apStore.apCount || 0, scanCmd: 'scanall' },
+  { id: 'ble', label: 'BLE', icon: '🔵', count: bleStore.deviceCount || 0, scanCmd: 'sniffbt' },
+  { id: 'probes', label: 'Probes', icon: '📱', count: probeStore.probeCount || 0, scanCmd: 'sniffprobe' },
+  { id: 'stations', label: 'Stations', icon: '👥', count: selectedAP.value?.stations?.length || 0, scanCmd: 'sniffbeacon' }
+])
 
-const packetTypes = [
-  { key: 'beacon', label: 'Beacon', color: 'bg-blue-400' },
-  { key: 'probe', label: 'Probe', color: 'bg-cyan-400' },
-  { key: 'deauth', label: 'Deauth', color: 'bg-red-400' },
-  { key: 'eapol', label: 'EAPOL', color: 'bg-purple-400' },
-  { key: 'data', label: 'Data', color: 'bg-emerald-400' },
-  { key: 'management', label: 'Mgmt', color: 'bg-amber-400' },
+const activeTabLabel = computed(() => targetTabs.value.find(t => t.id === activeTab.value)?.label || '')
+
+const runScanForTab = () => {
+  const tab = targetTabs.value.find(t => t.id === activeTab.value)
+  if (!tab) return
+  if (!serialStore.isConnected) {
+    toastShow('Connect to ESP32 first', 'warning')
+    return
+  }
+  runAction({
+    cmd: tab.scanCmd,
+    label: `Scan ${tab.label}`,
+    icon: '▶',
+    target: ''
+  }).catch(e => {
+    if (e.code === 'PREREQ_FAILED') {
+      toastShow(`${e.message}${e.hint ? ' — ' + e.hint : ''}`, 'error')
+    }
+  })
+}
+
+const AP_ACTIONS = [
+  { key: 'select',   label: 'Select', icon: '✅', cmd: ap => ap.index !== undefined ? `select -a ${ap.index}` : null, needsSelected: false },
+  { key: 'deauth',   label: 'Deauth', icon: '⚡', warning: true, cmd: 'attack -t deauth', needsSelected: true, title: 'Deauth selected APs (requires select first)' },
+  { key: 'beacon',   label: 'Beacon Spam', icon: '📯', warning: true, cmd: 'attack -t beacon -r', needsSelected: false },
+  { key: 'clone',    label: 'Beacon Clone', icon: '🔄', warning: true, cmd: 'attack -t beacon -a', needsSelected: true, title: 'Clone selected APs' },
+  { key: 'probe',    label: 'Probe', icon: '📨', warning: true, cmd: 'attack -t probe', needsSelected: true },
+  { key: 'info',     label: 'Info', icon: 'ℹ', cmd: ap => ap.index !== undefined ? `info -a ${ap.index}` : null, needsSelected: false },
+  { key: 'lista',    label: 'List APs', icon: '📋', cmd: 'list -a', needsSelected: false },
+  { key: 'listc',    label: 'List Stations', icon: '📋', cmd: 'list -c', needsSelected: false },
+  { key: 'save',     label: 'Save APs', icon: '💾', cmd: 'save -a', needsSelected: false }
 ]
 
-const totalPackets = computed(() => Object.values(dashStore.packetCounts).reduce((a, b) => a + b, 0))
+const BLE_ACTIONS = [
+  { key: 'sniffbt',  label: 'Sniff BLE', icon: '🔵', cmd: 'sniffbt', needsSelected: false },
+  { key: 'airtag',   label: 'AirTag', icon: '🏷', cmd: 'sniffbt -t airtag', needsSelected: false },
+  { key: 'flipper',  label: 'Flipper', icon: '🐬', cmd: 'sniffbt -t flipper', needsSelected: false },
+  { key: 'flock',    label: 'Flock', icon: '📷', cmd: 'sniffbt -t flock', needsSelected: false },
+  { key: 'meta',     label: 'Meta', icon: '🕶', cmd: 'sniffbt -t meta', needsSelected: false },
+  { key: 'skim',     label: 'Skim', icon: '💳', cmd: 'sniffskim', needsSelected: false },
+  { key: 'sour',     label: 'Sour Apple', icon: '🍎', warning: true, cmd: 'blespam -t sourapple', needsSelected: false },
+  { key: 'juice',    label: 'Apple Juice', icon: '🧃', warning: true, cmd: 'blespam -t applejuice', needsSelected: false },
+  { key: 'google',   label: 'Google', icon: '🔔', warning: true, cmd: 'blespam -t google', needsSelected: false },
+  { key: 'samsung',  label: 'Samsung', icon: '⌚', warning: true, cmd: 'blespam -t samsung', needsSelected: false },
+  { key: 'windows',  label: 'Windows', icon: '🪟', warning: true, cmd: 'blespam -t windows', needsSelected: false },
+  { key: 'spamall',  label: 'BT Spam All', icon: '📤', warning: true, cmd: 'blespam -t all', needsSelected: false },
+  { key: 'listt',    label: 'List AirTags', icon: '📋', cmd: 'list -t', needsSelected: false }
+]
 
-const chs = computed(() => Object.entries(dashStore.channelUtilization)
-  .map(([ch, count]) => ({ ch: parseInt(ch), count }))
-  .sort((a, b) => a.ch - b.ch))
+const PROBE_ACTIONS = [
+  { key: 'sniffprobe', label: 'Sniff Probe', icon: '📨', cmd: 'sniffprobe', needsSelected: false },
+  { key: 'listp',     label: 'List Probes', icon: '📋', cmd: 'list -p', needsSelected: false }
+]
 
-const maxChUtil = computed(() => Math.max(...chs.value.map(c => c.count), 1))
+const selectedTarget = computed(() => {
+  if (activeTab.value === 'ap' && selectedAP.value) {
+    const ap = selectedAP.value
+    return {
+      type: 'ap',
+      icon: '📶',
+      name: ap.essid || '(hidden)',
+      subtitle: ap.bssid,
+      ch: ap.channel,
+      rssi: ap.rssi,
+      enc: ap.encryption,
+      stationCount: ap.stations?.length,
+      vendor: ap.vendor,
+      raw: ap
+    }
+  }
+  if (activeTab.value === 'ble' && selectedBLE.value) {
+    const dev = selectedBLE.value
+    return {
+      type: 'ble',
+      icon: '🔵',
+      name: dev.name || 'Unknown',
+      subtitle: dev.mac,
+      rssi: dev.rssi,
+      vendor: dev.manufacturer,
+      isAirtag: dev.isAirtag,
+      raw: dev
+    }
+  }
+  return null
+})
 
-const pieSlices = computed(() => {
-  const total = totalPackets.value
-  if (!total) return []
-  const cx = 32, cy = 32, r = 30
-  let startAngle = -Math.PI / 2
-  const colors = ['#60a5fa', '#22d3ee', '#f87171', '#a78bfa', '#34d399', '#fbbf24']
-  return packetTypes.map((pk, i) => {
-    const val = dashStore.packetCounts[pk.key] || 0
-    const angle = (val / total) * Math.PI * 2
-    const endAngle = startAngle + angle
-    const x1 = cx + r * Math.cos(startAngle)
-    const y1 = cy + r * Math.sin(startAngle)
-    const x2 = cx + r * Math.cos(endAngle)
-    const y2 = cy + r * Math.sin(endAngle)
-    const large = angle > Math.PI ? 1 : 0
-    const d = `M ${cx} ${cy} L ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} Z`
-    startAngle = endAngle
-    return { d, fill: colors[i] }
-  })
+const availableActions = computed(() => {
+  if (activeTab.value === 'ap' && selectedAP.value) {
+    return AP_ACTIONS
+  }
+  if (activeTab.value === 'ble' && selectedBLE.value) {
+    return BLE_ACTIONS
+  }
+  if (activeTab.value === 'probes') {
+    return PROBE_ACTIONS
+  }
+  return []
+})
+
+const selectAP = (ap) => {
+  if (selectedAP.value?.bssid === ap.bssid) {
+    selectedAP.value = null
+  } else {
+    selectedAP.value = ap
+    if (activeTab.value === 'stations') activeTab.value = 'ap'
+  }
+}
+
+const selectBLE = (dev) => {
+  if (selectedBLE.value?.mac === dev.mac) {
+    selectedBLE.value = null
+  } else {
+    selectedBLE.value = dev
+  }
+}
+
+const clearSelection = () => {
+  selectedAP.value = null
+  selectedBLE.value = null
+}
+
+const actionState = (action) => {
+  if (!serialStore.isConnected) {
+    return { canRun: false, tooltip: 'Connect to device first' }
+  }
+  if (action.needsSelected && !selectedAP.value?.isSelected && activeTab.value === 'ap') {
+    return { canRun: false, tooltip: 'Click "Select" first to mark this AP as target' }
+  }
+  return { canRun: true, tooltip: action.title || action.label }
+}
+
+const actionBtnClass = (action) => {
+  if (action.warning) return 'bg-red-500/15 text-red-300 hover:bg-red-500/25 border-red-500/30'
+  return 'bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 border-indigo-500/30'
+}
+
+const runActionLocal = async (action) => {
+  if (!serialStore.isConnected) {
+    toastShow('Connect to ESP32 first', 'warning')
+    return
+  }
+  let cmd = action.cmd
+  if (typeof cmd === 'function') {
+    if (!selectedTarget.value) {
+      toastShow('Select a target first', 'warning')
+      return
+    }
+    cmd = cmd(selectedTarget.value.raw)
+    if (!cmd) {
+      toastShow('Target has no index — list APs first', 'warning')
+      return
+    }
+  }
+  const target = selectedTarget.value
+    ? `${selectedTarget.value.name}${selectedTarget.value.subtitle ? ' (' + selectedTarget.value.subtitle + ')' : ''}`
+    : ''
+  try {
+    const result = await runAction({
+      cmd,
+      label: action.label,
+      icon: action.icon,
+      target
+    })
+    if (result?.needsConfirm) {
+      showConfirmForAction(result)
+    }
+  } catch (e) {
+    if (e.code === 'PREREQ_FAILED') {
+      toastShow(`${e.message}${e.hint ? ' — ' + e.hint : ''}`, 'error')
+    } else {
+      toastShow(`${action.label} failed: ${e.message}`, 'error')
+    }
+  }
+}
+
+const confirmDialog = reactive({
+  show: false,
+  title: '',
+  body: '',
+  cmd: '',
+  target: '',
+  icon: '',
+  severity: SEVERITY.HIGH,
+  confirmLabel: 'Run',
+  pendingPayload: null
+})
+
+const showConfirmForAction = (payload) => {
+  const meta = getCommandMeta(payload.cmd)
+  confirmDialog.show = true
+  confirmDialog.title = `${payload.label} — подтвердите`
+  confirmDialog.body = meta?.destructive
+    ? ['Команда деструктивна для ESP32 и сетей рядом.', 'Убедитесь в наличии разрешения на тестирование.']
+    : ['Команда изменит состояние ESP32.', 'Продолжить?']
+  confirmDialog.cmd = payload.cmd
+  confirmDialog.target = payload.target
+  confirmDialog.icon = meta?.destructive ? '⚠' : '?'
+  confirmDialog.severity = meta?.severity || SEVERITY.HIGH
+  confirmDialog.confirmLabel = payload.label
+  confirmDialog.pendingPayload = payload
+}
+
+const onConfirmAction = async () => {
+  const payload = confirmDialog.pendingPayload
+  confirmDialog.show = false
+  confirmDialog.pendingPayload = null
+  if (payload) {
+    try {
+      await runAction({ ...payload, options: { confirm: false } })
+    } catch (e) {
+      toastShow(`Failed: ${e.message}`, 'error')
+    }
+  }
+}
+const onCancelConfirm = () => {
+  confirmDialog.show = false
+  confirmDialog.pendingPayload = null
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'ap' || tab === 'stations') {
+    selectedBLE.value = null
+  } else if (tab === 'ble') {
+    selectedAP.value = null
+  } else if (tab === 'probes') {
+    selectedAP.value = null
+    selectedBLE.value = null
+  }
 })
 
 watch(() => serialStore.terminalOutput.length, () => {
@@ -241,98 +534,21 @@ const onTerminalScroll = () => {
   else if (dist < 6) autoScroll.value = true
 }
 
-const handleClear = () => { apStore.clearAPs(); bleStore.clearDevices(); dashStore.resetStats() }
-
-const importRef = ref(null)
-
-const handleExport = () => {
-  const data = {
-    version: '0.2.0',
-    exportedAt: new Date().toISOString(),
-    apCount: apStore.apCount,
-    bleCount: bleStore.deviceCount,
-    aps: Array.from(apStore.accessPoints.values()).map(ap => ({
-      index: ap.index, essid: ap.essid, bssid: ap.bssid,
-      channel: ap.channel, rssi: ap.rssi, encryption: ap.encryption,
-      isHidden: ap.isHidden, isSelected: ap.isSelected,
-      vendor: ap.vendor, lastSeen: ap.lastSeen,
-      rssiHistory: ap.rssiHistory,
-      stations: ap.stations?.map(s => ({ id: s.id, mac: s.mac, vendor: s.vendor, lastSeen: s.lastSeen }))
-    })),
-    ble: Array.from(bleStore.devices.values()).map(d => ({
-      mac: d.mac, name: d.name, rssi: d.rssi,
-      isAirtag: d.isAirtag, manufacturer: d.manufacturer, lastSeen: d.lastSeen
-    })),
-    packetCounts: { ...dashStore.packetCounts },
-    channelUtilization: { ...dashStore.channelUtilization },
-    stats: { commandsSent: dashStore.commandsSent, packetsCaptured: dashStore.packetsCaptured }
-  }
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = `marauder-session-${new Date().toISOString().slice(0, 10)}.json`
-  a.click(); URL.revokeObjectURL(url)
-}
-
-const exportWigleAPs = () => {
-  wigleMenuOpen.value = false
-  const aps = Array.from(apStore.accessPoints.values())
-  if (aps.length === 0) { toastShow('No APs to export', 'warning'); return }
-  const csv = apsToWigle(aps)
-  const date = new Date().toISOString().slice(0, 10)
-  downloadWigle(`wigle-wifi-${date}.csv`, csv)
-  toastShow(`Exported ${aps.length} APs to Wigle CSV`, 'success')
-}
-
-const exportWigleBLE = () => {
-  wigleMenuOpen.value = false
-  const devs = Array.from(bleStore.devices.values())
-  if (devs.length === 0) { toastShow('No BLE devices to export', 'warning'); return }
-  const csv = bleToWigle(devs)
-  const date = new Date().toISOString().slice(0, 10)
-  downloadWigle(`wigle-ble-${date}.csv`, csv)
-  toastShow(`Exported ${devs.length} BLE devices to Wigle CSV`, 'success')
-}
-
-const exportWigleProbes = () => {
-  wigleMenuOpen.value = false
-  if (probeStore.probes.length === 0) { toastShow('No probes to export', 'warning'); return }
-  const csv = probesToWigle(probeStore.probes)
-  const date = new Date().toISOString().slice(0, 10)
-  downloadWigle(`wigle-probes-${date}.csv`, csv)
-  toastShow(`Exported ${probeStore.probes.length} probes to Wigle CSV`, 'success')
-}
-
 const copyTerminal = async () => {
   const text = serialStore.terminalOutput
     .map(line => line.replace(/<[^>]+>/g, ''))
     .join('\n')
   if (!text) return
   const ok = await copyToClipboard(text)
-  toastShow(ok ? `Copied ${serialStore.terminalOutput.length} lines to clipboard` : 'Copy failed', ok ? 'success' : 'error')
-}
-
-const handleImport = async (e) => {
-  const file = e.target.files?.[0]
-  if (!file) return
-  if (file.size > 10 * 1024 * 1024) {
-    toastShow('Import file too large (max 10 MB)', 'error')
-    e.target.value = ''
-    return
-  }
-  try {
-    const text = await file.text()
-    const data = JSON.parse(text)
-    apStore.clearAPs(); bleStore.clearDevices(); dashStore.resetStats()
-    if (data.aps) data.aps.forEach(ap => apStore.updateOrAddAP(ap))
-    if (data.ble) data.ble.forEach(d => bleStore.updateOrAddDevice(d))
-    if (data.packetCounts) dashStore.setPacketCounts(data.packetCounts)
-    if (data.channelUtilization) dashStore.setChannelUtilization(data.channelUtilization)
-    if (data.stats) dashStore.setStats(data.stats)
-    toastShow(`Session imported: ${data.apCount || 0} APs, ${data.bleCount || 0} BLE`, 'success')
-  } catch (err) {
-    toastShow(`Import failed: ${err.message}`, 'error')
-  }
-  e.target.value = ''
+  toastShow(ok ? `Copied ${serialStore.terminalOutput.length} lines` : 'Copy failed', ok ? 'success' : 'error')
 }
 </script>
+
+<style scoped>
+.line-clamp-6 {
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+</style>

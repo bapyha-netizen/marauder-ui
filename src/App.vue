@@ -16,6 +16,7 @@
           <span class="w-1.5 h-1.5 rounded-full" :class="serialStore.isConnected ? 'bg-emerald-400' : serialStore.reconnectAttempts > 0 ? 'bg-amber-400 animate-pulse' : 'bg-red-400'"></span>
           {{ serialStore.isConnected ? 'Connected' : serialStore.reconnectAttempts > 0 ? `Reconnecting (${serialStore.reconnectAttempts})` : 'Disconnected' }}
         </div>
+        <AppActionBar />
       </div>
       <div class="flex items-center space-x-2">
         <label class="flex items-center space-x-1.5 text-[11px] text-slate-400 cursor-pointer" :title="serialStore.autoReconnect ? 'Auto-reconnect enabled' : 'Auto-reconnect disabled'">
@@ -115,6 +116,7 @@ import { defineAsyncComponent } from 'vue'
 import MobileBlocker from './components/MobileBlocker.vue'
 import PWAInstallPrompt from './components/PWAInstallPrompt.vue'
 import CommandBuilder from './components/CommandBuilder.vue'
+import AppActionBar from './components/AppActionBar.vue'
 const DashboardView = defineAsyncComponent(() => import('./components/dashboard/DashboardView.vue'))
 const APExplorer = defineAsyncComponent(() => import('./components/ap/APExplorer.vue'))
 const BLEExplorer = defineAsyncComponent(() => import('./components/ble/BLEExplorer.vue'))
