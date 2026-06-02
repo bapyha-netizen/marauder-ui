@@ -1,6 +1,6 @@
 # Marauder UI — документация
 
-**Версия:** 0.4.2
+**Версия:** 0.4.3
 **Прошивка:** [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko
 **Назначение:** Desktop/web UI для управления ESP32 с прошивкой Marauder через Web Serial API
 
@@ -405,26 +405,28 @@ taskkill /PID <номер> /F
 
 ## Производительность
 
-Версия 0.4.2 содержит комплексные оптимизации для работы с потоковыми данными ESP32 (1000+ строк/сек).
+Версия 0.4.3 содержит комплексные оптимизации для работы с потоковыми данными ESP32 (1000+ строк/сек).
 
 ### Оптимизации парсера (parserEngine.js)
 
 - **O(1) dispatch по первому символу** — вместо 15 последовательных if-ors используется `_DISPATCH` map с 14 кодпоинтами
-- **O(1) поиск AP по BSSID** — `Map<bssid, ap>` индекс в apStore, fast path в `findAPByBSSID`, `_findExisting`
-- **O(1) поиск AP по index** — `Map<index, apKey>` индекс для `updateAP`, `parseStationList`
+- **O(1) поиск AP по BSSID** — поддерживаемый индекс `_byBssid` (Map<bssid, key>)
+- **O(1) поиск AP по index** — поддерживаемый индекс `_byIndex` (Map<index, key>)
 - Эффект: **10-50x быстрее** парсинг строк (было 300 regex/line → 1-3 regex/line)
 
 ### Оптимизации stores
 
+- **Maintained indexes** — `_byBssid` и `_byIndex` обновляются инкрементально при мутациях (не computed)
 - **shallowRef + triggerRef** — мутации in-place вместо `new Map(...)` копирования
 - **push/shift вместо spread** — O(1) вместо O(N) для FIFO буферов
-- **eventsReversed computed** — push (O(1)) вместо unshift (O(N))
+- **eventsReversed** — push (O(1)) + loop-based reverse (без spread)
 - **debounced + throttle save** — гарантирует сохранение при visibilitychange
+- **BLE cleanup timer** — очистка старых устройств раз в 30 сек, не на каждый пакет
 - Эффект: **10-100x меньше аллокаций** на каждое обновление
 
 ### Оптимизации UI
 
-- **content-visibility: auto** — браузер пропускает rendering off-screen lines (2000 → ~40 visible)
+- **Windowed terminal rendering** — рендерится только ~40 видимых строк из 2000 (viewport-based)
 - **requestAnimationFrame** — группирует scroll updates
 - **v-text вместо v-html** — убран XSS risk, нативное экранирование Vue
 - Эффект: **~50x меньше DOM work** при 2000 строках в терминале

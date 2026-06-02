@@ -29,9 +29,11 @@
         </div>
         <div ref="liveRef" @scroll="onTerminalScroll"
           class="flex-1 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed scrollbar-thin bg-black/30">
-          <div v-for="line in serialStore.terminalOutput" :key="line.text"
-            class="hover:bg-white/5 rounded px-1 -mx-1 terminal-line"
+          <div :style="{ height: spacerTop + 'px' }"></div>
+          <div v-for="(line, i) in visibleTerminalLines" :key="visibleStart + i"
+            class="hover:bg-white/5 rounded px-1 -mx-1"
             :class="line.cls">{{ line.text }}</div>
+          <div :style="{ height: spacerBottom + 'px' }"></div>
           <div v-if="!serialStore.terminalOutput.length" class="text-slate-600 text-center py-8">
             Waiting for data...
           </div>
@@ -283,6 +285,23 @@ const selectedBLE = ref(null)
 const actions = dispatcherActions
 const actionRunning = dispatcherRunning
 
+const TERMINAL_LINE_HEIGHT = 18
+const TERMINAL_OVERSCAN = 10
+const terminalScrollTop = ref(0)
+const terminalViewportHeight = ref(400)
+
+const totalTerminalLines = computed(() => serialStore.terminalOutput.length)
+const visibleStart = computed(() => Math.max(0, Math.floor(terminalScrollTop.value / TERMINAL_LINE_HEIGHT) - TERMINAL_OVERSCAN))
+const visibleEnd = computed(() => Math.min(totalTerminalLines.value, Math.ceil((terminalScrollTop.value + terminalViewportHeight.value) / TERMINAL_LINE_HEIGHT) + TERMINAL_OVERSCAN))
+const visibleTerminalLines = computed(() => {
+  const start = visibleStart.value
+  const end = visibleEnd.value
+  if (start >= end) return []
+  return serialStore.terminalOutput.slice(start, end)
+})
+const spacerTop = computed(() => visibleStart.value * TERMINAL_LINE_HEIGHT)
+const spacerBottom = computed(() => Math.max(0, (totalTerminalLines.value - visibleEnd.value) * TERMINAL_LINE_HEIGHT))
+
 const targetTabs = computed(() => [
   { id: 'ap', label: 'APs', icon: '📶', count: apStore.apCount || 0, scanCmd: 'scanall' },
   { id: 'ble', label: 'BLE', icon: '🔵', count: bleStore.deviceCount || 0, scanCmd: 'sniffbt' },
@@ -524,7 +543,10 @@ watch(() => serialStore.terminalOutput.length, () => {
   if (paused.value) return
   if (!autoScroll.value) return
   requestAnimationFrame(() => {
-    if (liveRef.value) liveRef.value.scrollTop = liveRef.value.scrollHeight
+    if (liveRef.value) {
+      liveRef.value.scrollTop = liveRef.value.scrollHeight
+      terminalScrollTop.value = liveRef.value.scrollTop
+    }
   })
 })
 
@@ -533,7 +555,21 @@ const onTerminalScroll = () => {
   const dist = liveRef.value.scrollHeight - (liveRef.value.scrollTop + liveRef.value.clientHeight)
   if (dist > 60) autoScroll.value = false
   else if (dist < 6) autoScroll.value = true
+  terminalScrollTop.value = liveRef.value.scrollTop
 }
+
+const onTerminalResize = () => {
+  if (liveRef.value) {
+    terminalViewportHeight.value = liveRef.value.clientHeight
+  }
+}
+
+watch(liveRef, (ref) => {
+  if (ref) {
+    onTerminalResize()
+    new ResizeObserver(onTerminalResize).observe(ref)
+  }
+}, { immediate: true })
 
 const copyTerminal = async () => {
   const text = serialStore.terminalOutput
@@ -551,9 +587,5 @@ const copyTerminal = async () => {
   -webkit-line-clamp: 6;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-.terminal-line {
-  content-visibility: auto;
-  contain-intrinsic-size: 0 18px;
 }
 </style>

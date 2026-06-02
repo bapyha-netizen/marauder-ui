@@ -21,7 +21,12 @@ export const useDashboardStore = defineStore('dashboard', () => {
     return `${m}m ${s}s`
   })
 
-  const eventsReversed = computed(() => [...events.value].reverse())
+  const eventsReversed = computed(() => {
+    const ev = events.value
+    const res = new Array(ev.length)
+    for (let i = 0; i < ev.length; i++) res[i] = ev[ev.length - 1 - i]
+    return res
+  })
 
   let tickInterval = null
 

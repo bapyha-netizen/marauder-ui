@@ -6,6 +6,8 @@ const PERSIST_KEY = 'bleDevices'
 
 export const useBleStore = defineStore('ble', () => {
   const devices = shallowRef(new Map())
+  let _cleanupTimer = null
+  const CLEANUP_INTERVAL_MS = 30000
 
   const sortedDevices = computed(() => {
     return Array.from(devices.value.values())
@@ -13,6 +15,32 @@ export const useBleStore = defineStore('ble', () => {
   })
 
   const deviceCount = computed(() => devices.value.size)
+
+  function _cleanupOldDevices() {
+    const map = devices.value
+    const cutoff = Date.now() - CLEANUP_INTERVAL_MS
+    let changed = false
+    for (const [mac, d] of map.entries()) {
+      if (d.lastSeen.getTime() < cutoff) {
+        map.delete(mac)
+        changed = true
+      }
+    }
+    if (changed) triggerRef(devices)
+  }
+
+  function _scheduleCleanup() {
+    if (_cleanupTimer) {
+      clearTimeout(_cleanupTimer)
+    }
+    _cleanupTimer = setTimeout(() => {
+      _cleanupOldDevices()
+      _scheduleCleanup()
+    }, CLEANUP_INTERVAL_MS)
+  }
+
+  // Start cleanup timer on init
+  _scheduleCleanup()
 
   function updateOrAddDevice(dev) {
     const now = new Date()
@@ -30,15 +58,15 @@ export const useBleStore = defineStore('ble', () => {
       lastSeen: dev.lastSeen || now,
       packetCount: (existing?.packetCount || 0) + 1
     })
-    const cutoff = Date.now() - 300000
-    for (const [mac, d] of map.entries()) {
-      if (d.lastSeen.getTime() < cutoff) map.delete(mac)
-    }
     triggerRef(devices)
   }
 
   function clearDevices() {
     devices.value = new Map()
+    if (_cleanupTimer) {
+      clearTimeout(_cleanupTimer)
+      _cleanupTimer = null
+    }
     clearPersistedStore(PERSIST_KEY)
   }
 

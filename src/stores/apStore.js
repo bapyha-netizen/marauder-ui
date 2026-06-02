@@ -31,15 +31,35 @@ export const useApStore = defineStore('ap', () => {
     return ch
   })
 
-  const _indexByApIndex = computed(() => {
-    const idx = new Map()
+  const _byBssid = shallowRef(new Map())
+  const _byIndex = shallowRef(new Map())
+
+  function _rebuildIndexes() {
+    const bssidMap = new Map()
+    const indexMap = new Map()
     accessPoints.value.forEach((ap, key) => {
-      if (ap.index !== undefined && ap.index !== null) {
-        idx.set(ap.index, key)
-      }
+      if (ap.bssid) bssidMap.set(ap.bssid.toUpperCase(), key)
+      if (ap.index !== undefined && ap.index !== null) indexMap.set(ap.index, key)
     })
-    return idx
-  })
+    _byBssid.value = bssidMap
+    _byIndex.value = indexMap
+  }
+
+  function _updateIndexesForKey(key, ap) {
+    if (ap.bssid) _byBssid.value.set(ap.bssid.toUpperCase(), key)
+    else _byBssid.value.delete(ap.bssid?.toUpperCase() || '')
+
+    if (ap.index !== undefined && ap.index !== null) _byIndex.value.set(ap.index, key)
+    else _byIndex.value.delete(ap.index)
+  }
+
+  function _removeIndexesForKey(key) {
+    const ap = accessPoints.value.get(key)
+    if (ap) {
+      if (ap.bssid) _byBssid.value.delete(ap.bssid.toUpperCase())
+      if (ap.index !== undefined && ap.index !== null) _byIndex.value.delete(ap.index)
+    }
+  }
 
   const avgSignal = computed(() => {
     const aps = Array.from(accessPoints.value.values()).filter(ap => ap.rssi)
@@ -50,15 +70,13 @@ export const useApStore = defineStore('ap', () => {
   function _findExisting(ap) {
     if (ap.bssid) {
       const upper = ap.bssid.toUpperCase()
+      const key = _byBssid.value.get(upper)
+      if (key) return key
       if (accessPoints.value.has(upper)) return upper
-      for (const [k, v] of accessPoints.value.entries()) {
-        if (v.bssid && v.bssid.toUpperCase() === upper) return k
-      }
     }
     if (ap.index !== undefined && ap.index !== null) {
-      for (const [k, v] of accessPoints.value.entries()) {
-        if (v.index === ap.index) return k
-      }
+      const key = _byIndex.value.get(ap.index)
+      if (key) return key
     }
     if (ap.channel !== undefined && ap.essid) {
       const fk = `${ap.channel}-${ap.essid}`
@@ -88,6 +106,7 @@ export const useApStore = defineStore('ap', () => {
         vendor: ap.vendor || existing.vendor || '',
         frameCount: (existing.frameCount || 0) + (ap.frameCount || 0)
       })
+      _updateIndexesForKey(newKey, existing)
       if (existing.rssi != null) {
         existing.rssiHistory.push(existing.rssi)
         if (existing.rssiHistory.length > 20) existing.rssiHistory.shift()
@@ -114,8 +133,12 @@ export const useApStore = defineStore('ap', () => {
       newAP.rssiHistory.push(newAP.rssi)
       if (newAP.rssiHistory.length > 20) newAP.rssiHistory.shift()
     }
-    if (existingKey && existingKey !== newKey) accessPoints.value.delete(existingKey)
+    if (existingKey && existingKey !== newKey) {
+      _removeIndexesForKey(existingKey)
+      accessPoints.value.delete(existingKey)
+    }
     accessPoints.value.set(newKey, newAP)
+    _updateIndexesForKey(newKey, newAP)
     triggerRef(accessPoints)
   }
 
@@ -136,6 +159,8 @@ export const useApStore = defineStore('ap', () => {
 
   function clearAPs() {
     accessPoints.value = new Map()
+    _byBssid.value = new Map()
+    _byIndex.value = new Map()
     clearPersistedStore(PERSIST_KEY)
   }
 
@@ -147,11 +172,12 @@ export const useApStore = defineStore('ap', () => {
   }
 
   function updateAP(index, data) {
-    const key = _indexByApIndex.value.get(index)
+    const key = _byIndex.value.get(index)
     if (!key) return
     const ap = accessPoints.value.get(key)
     if (!ap) return
     Object.assign(ap, data)
+    _updateIndexesForKey(key, ap)
     triggerRef(accessPoints)
   }
 
@@ -160,6 +186,7 @@ export const useApStore = defineStore('ap', () => {
     let changed = false
     for (const [key, ap] of accessPoints.value.entries()) {
       if (now - new Date(ap.lastSeen).getTime() > maxAgeMs) {
+        _removeIndexesForKey(key)
         accessPoints.value.delete(key)
         changed = true
       }
@@ -180,22 +207,26 @@ export const useApStore = defineStore('ap', () => {
 
   function findAPByBSSID(bssid) {
     const upper = bssid.toUpperCase()
-    const direct = accessPoints.value.get(upper)
-    if (direct) return { key: upper, ap: direct }
-    for (const [key, ap] of accessPoints.value.entries()) {
-      if (ap.bssid && ap.bssid.toUpperCase() === upper) return { key, ap }
+    const key = _byBssid.value.get(upper)
+    if (key) {
+      const ap = accessPoints.value.get(key)
+      if (ap) return { key, ap }
+    }
+    if (accessPoints.value.has(upper)) {
+      return { key: upper, ap: accessPoints.value.get(upper) }
     }
     return null
   }
 
   function findAPByIndex(index) {
-    const key = _indexByApIndex.value.get(index)
+    const key = _byIndex.value.get(index)
     if (!key) return null
     const ap = accessPoints.value.get(key)
     return ap ? { key, ap } : null
   }
 
   watch(accessPoints, (map) => {
+    _rebuildIndexes()
     const items = []
     for (const [key, ap] of map.entries()) {
       items.push({ ...ap, bssid: key })
@@ -205,7 +236,10 @@ export const useApStore = defineStore('ap', () => {
 
   async function hydrate() {
     const saved = await loadStore(PERSIST_KEY)
-    if (!saved || saved.length === 0) return
+    if (!saved || saved.length === 0) {
+      _rebuildIndexes()
+      return
+    }
     const current = accessPoints.value
     let changed = false
     for (const ap of saved) {
@@ -226,6 +260,7 @@ export const useApStore = defineStore('ap', () => {
       current.set(key, restored)
       changed = true
     }
+    if (changed) _rebuildIndexes()
     if (changed) triggerRef(accessPoints)
   }
 

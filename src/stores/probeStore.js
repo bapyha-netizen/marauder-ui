@@ -34,14 +34,18 @@ export const useProbeStore = defineStore('probe', () => {
 
   let _probeCounter = 0
   watch(probes, (arr) => {
-    const items = arr.map((p, idx) => ({
-      id: `${p.clientMac}-${p.time?.getTime?.() || idx}`,
-      rssi: p.rssi,
-      ch: p.ch,
-      clientMac: p.clientMac,
-      ssid: p.ssid,
-      time: p.time
-    }))
+    const items = new Array(arr.length)
+    for (let i = 0; i < arr.length; i++) {
+      const p = arr[i]
+      items[i] = {
+        id: `${p.clientMac}-${p.time?.getTime?.() || i}`,
+        rssi: p.rssi,
+        ch: p.ch,
+        clientMac: p.clientMac,
+        ssid: p.ssid,
+        time: p.time
+      }
+    }
     debouncedSave(PERSIST_KEY, items)
   }, { deep: false })
 
