@@ -448,6 +448,11 @@ function parseSystemMsg(line, store) {
     store.addEvent('system', line)
     return true
   }
+  // Handle hash-prefixed commands like #sniffbeacon, #stopscan (Marauder output)
+  if (/^#[a-z]+/i.test(line)) {
+    store.addEvent('system', line)
+    return true
+  }
   if (/^(Starting|Stopping|Clearing|Scanning|Sniffing|Wardriving)/i.test(line)) {
     store.addEvent('system', line)
     return true
