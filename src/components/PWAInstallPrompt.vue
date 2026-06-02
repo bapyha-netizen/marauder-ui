@@ -1,19 +1,27 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 const showPrompt = ref(false)
 const deferredPrompt = ref(null)
 
+const onBeforeInstall = (e) => {
+  e.preventDefault()
+  deferredPrompt.value = e
+  showPrompt.value = true
+}
+const onAppInstalled = () => {
+  showPrompt.value = false
+  deferredPrompt.value = null
+}
+
 onMounted(() => {
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault()
-    deferredPrompt.value = e
-    showPrompt.value = true
-  })
-  window.addEventListener('appinstalled', () => {
-    showPrompt.value = false
-    deferredPrompt.value = null
-  })
+  window.addEventListener('beforeinstallprompt', onBeforeInstall)
+  window.addEventListener('appinstalled', onAppInstalled)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('beforeinstallprompt', onBeforeInstall)
+  window.removeEventListener('appinstalled', onAppInstalled)
 })
 
 const install = async () => {

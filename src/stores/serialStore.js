@@ -397,11 +397,15 @@ export const useSerialStore = defineStore('serial', () => {
     isDemoMode.value = !isDemoMode.value
   }
 
+  const setTerminalOutput = (arr) => {
+    terminalOutput.value = arr
+  }
+
   return {
     port, reader, isConnected, isDemoMode, terminalOutput,
     rawBuffer, baudRate, autoReconnect, reconnectAttempts,
     connect, disconnect, sendCommand, sendAndWait, sendSequence, scanAll, clearListAndScan,
-    addToTerminal, clearOutput, toggleDemo, onLine,
+    addToTerminal, clearOutput, toggleDemo, onLine, setTerminalOutput,
     cancelReconnect: _cancelReconnect, scheduleReconnect: _scheduleReconnect
   }
 })

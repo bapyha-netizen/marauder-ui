@@ -60,7 +60,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import { useSerialStore } from '../stores/serialStore'
 import { useDashboardStore } from '../stores/dashboardStore'
 import { COMMAND_GROUPS } from '../services/commandRegistry'
@@ -163,4 +163,10 @@ const hideTip = () => {
   tooltipCmd.value = null
   tipPos.value = null
 }
+
+onUnmounted(() => {
+  if (tipTimer) clearTimeout(tipTimer)
+  tooltipCmd.value = null
+  tipPos.value = null
+})
 </script>

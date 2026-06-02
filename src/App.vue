@@ -246,12 +246,12 @@ const toggleDemoMode = async () => {
   serialStore.toggleDemo()
   if (serialStore.isDemoMode) {
     lastLength = 0
-    serialStore.terminalOutput = await _loadDemoData()
+    serialStore.setTerminalOutput(await _loadDemoData())
     parseDemoAP(); parseDemoBLE()
     demoInterval.value = setInterval(() => { parseDemoAP(); parseDemoBLE() }, 5000)
   } else {
     if (demoInterval.value) clearInterval(demoInterval.value)
-    serialStore.terminalOutput = []
+    serialStore.setTerminalOutput([])
     lastLength = 0
     apStore.clearAPs(); bleStore.clearDevices(); dashStore.resetStats()
     probeStore.clearProbes()

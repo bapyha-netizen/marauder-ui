@@ -90,7 +90,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { COMMAND_GROUPS, WORKFLOWS } from '../../services/commandRegistry'
 
 const search = ref('')
@@ -140,4 +140,8 @@ function copyCommand(text) {
     copyTimer = setTimeout(() => { copied.value = null }, 2000)
   })
 }
+
+onUnmounted(() => {
+  if (copyTimer) clearTimeout(copyTimer)
+})
 </script>

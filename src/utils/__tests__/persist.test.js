@@ -87,4 +87,16 @@ describe('persist utility', () => {
     expect(saved).toHaveLength(1)
     expect(saved[0].id).toBe('AA-BB-12345')
   })
+
+  it('rapid debouncedSaves to same store coalesce (sequence drops stale)', async () => {
+    debouncedSave('accessPoints', [{ bssid: 'A' }])
+    await wait(500)
+    debouncedSave('accessPoints', [{ bssid: 'B' }])
+    await wait(500)
+    debouncedSave('accessPoints', [{ bssid: 'C' }])
+    await wait(1100)
+    const saved = await getAll('accessPoints')
+    expect(saved).toHaveLength(1)
+    expect(saved[0].bssid).toBe('C')
+  })
 })

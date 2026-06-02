@@ -4,15 +4,19 @@ const SAVE_DEBOUNCE_MS = 1000
 
 const _timers = new Map()
 const _pending = new Map()
+const _seq = new Map()
 
 export function debouncedSave(storeName, items, getKey) {
-  _pending.set(storeName, { items, getKey })
+  const seq = (_seq.get(storeName) || 0) + 1
+  _seq.set(storeName, seq)
+  _pending.set(storeName, { items, getKey, seq })
   if (_timers.has(storeName)) clearTimeout(_timers.get(storeName))
   _timers.set(storeName, setTimeout(async () => {
     const pending = _pending.get(storeName)
     _pending.delete(storeName)
     _timers.delete(storeName)
     if (!pending) return
+    if (pending.seq !== _seq.get(storeName)) return
     try {
       const itemsWithKey = pending.getKey
         ? pending.items

@@ -3,7 +3,6 @@ import { useBleStore } from '../stores/bleStore'
 import { useDashboardStore } from '../stores/dashboardStore'
 import { useProbeStore } from '../stores/probeStore'
 import { lookupVendor } from '../utils/oui'
-const _vendorCache = new Map()
 
 const CLEANUP_INTERVAL = 30000
 const AP_MAX_AGE = 300000

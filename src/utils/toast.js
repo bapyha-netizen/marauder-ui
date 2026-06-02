@@ -3,6 +3,8 @@ import { ref } from 'vue'
 const toasts = ref([])
 let nextId = 0
 const _lastToast = new Map()
+const _lastToastOrder = []
+const _MAX_TRACKED = 100
 
 export function useToast() {
   function show(message, type = 'info', duration = 3000) {
@@ -10,10 +12,19 @@ export function useToast() {
     const last = _lastToast.get(message) || 0
     if (now - last < 500) return
     _lastToast.set(message, now)
+    _lastToastOrder.push(message)
+    if (_lastToastOrder.length > _MAX_TRACKED) {
+      const evicted = _lastToastOrder.shift()
+      _lastToast.delete(evicted)
+    }
 
     const id = ++nextId
     const toast = { id, message, type }
     toasts.value.push(toast)
+    if (toasts.value.length > 5) {
+      const oldest = toasts.value.shift()
+      if (oldest?.timerId) clearTimeout(oldest.timerId)
+    }
 
     toast.timerId = setTimeout(() => {
       remove(id)
@@ -31,4 +42,13 @@ export function useToast() {
   }
 
   return { toasts, show, remove }
+}
+
+export function _resetToastState() {
+  toasts.value.splice(0).forEach(t => {
+    if (t.timerId) clearTimeout(t.timerId)
+  })
+  _lastToast.clear()
+  _lastToastOrder.length = 0
+  nextId = 0
 }

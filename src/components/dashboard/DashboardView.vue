@@ -315,6 +315,11 @@ const copyTerminal = async () => {
 const handleImport = async (e) => {
   const file = e.target.files?.[0]
   if (!file) return
+  if (file.size > 10 * 1024 * 1024) {
+    toastShow('Import file too large (max 10 MB)', 'error')
+    e.target.value = ''
+    return
+  }
   try {
     const text = await file.text()
     const data = JSON.parse(text)
