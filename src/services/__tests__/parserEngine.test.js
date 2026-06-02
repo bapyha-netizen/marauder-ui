@@ -396,6 +396,77 @@ describe('parseLine — ESP32 Marauder output parser', () => {
       expect(dashStore.events.length).toBe(0)
     })
   })
+
+  describe('NaN safety (corrupted ESP32 output)', () => {
+    it('parseAPBeacon never stores NaN rssi', () => {
+      parseLine('-65 Ch: 6 AA:BB:CC:11:22:33 ESSID: Good')
+      parseLine('   Ch: 6 AA:BB:CC:11:22:44 ESSID: NaNRssi')
+      const ap2 = apStore.accessPoints.get('AA:BB:CC:11:22:44')
+      if (ap2) {
+        expect(Number.isNaN(ap2.rssi)).toBe(false)
+      }
+    })
+
+    it('parseAPList handles malformed rssi without NaN', () => {
+      parseLine('[0][CH:6] MyNetwork -65')
+      parseLine('[1][CH:11] OfficeWiFi (selected) -72')
+      for (const ap of apStore.accessPoints.values()) {
+        if (ap.rssi !== null) {
+          expect(Number.isNaN(ap.rssi)).toBe(false)
+        }
+      }
+    })
+
+    it('parseChannelAnalyzer never stores NaN key/value', () => {
+      parseLine('Ch 1: 50')
+      parseLine('Ch 6: 100')
+      parseLine('Ch 11: 75')
+      for (const [ch, count] of Object.entries(dashStore.channelUtilization)) {
+        expect(Number.isNaN(parseInt(ch))).toBe(false)
+        expect(Number.isNaN(count)).toBe(false)
+      }
+    })
+
+    it('parsePacketCount never stores NaN count', () => {
+      parseLine('beacon: 100')
+      parseLine('probe: 50')
+      parseLine('deauth: 10')
+      for (const [key, val] of Object.entries(dashStore.packetCounts)) {
+        expect(Number.isNaN(val)).toBe(false)
+      }
+    })
+
+    it('parseAPInfo never stores NaN channel or rssi', () => {
+      apStore.updateOrAddAP({
+        index: 1,
+        essid: 'TestNet',
+        bssid: 'AA:BB:CC:11:22:33',
+        channel: 1,
+        rssi: -50
+      })
+      parseLine('Index: 1')
+      parseLine('BSSID: AA:BB:CC:11:22:33')
+      parseLine('Channel: 6')
+      parseLine('RSSI: -65')
+      const ap = apStore.accessPoints.get('AA:BB:CC:11:22:33')
+      expect(Number.isNaN(ap.channel)).toBe(false)
+      expect(Number.isNaN(ap.rssi)).toBe(false)
+    })
+  })
+
+  describe('resetParserState', () => {
+    it('resets parser globals on disconnect', async () => {
+      const { resetParserState, parseLine } = await import('../parserEngine.js')
+      parseLine('Index: 5')
+      parseLine('BSSID: AA:BB:CC:11:22:33')
+      expect(() => resetParserState()).not.toThrow()
+    })
+
+    it('resets BLE key counter', async () => {
+      const { resetParserState } = await import('../parserEngine.js')
+      expect(() => resetParserState()).not.toThrow()
+    })
+  })
 })
 
 describe('Demo generators', () => {

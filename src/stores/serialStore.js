@@ -1,11 +1,17 @@
 import { defineStore } from 'pinia'
 import { ref, shallowRef } from 'vue'
 import { useApStore } from './apStore'
-import { parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil } from '../services/parserEngine'
+import { parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil, resetParserState } from '../services/parserEngine'
 import { escHtml } from '../utils/format'
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000]
 const MAX_RECONNECT_ATTEMPTS = 6
+const TERMINAL_MAX_LINES = 2000
+const RAW_BUFFER_MAX = 65536
+const RAW_BUFFER_TRIM_TO = 32768
+const DEFAULT_CMD_TIMEOUT_MS = 15000
+const SEQUENCE_STEP_TIMEOUT_MS = 5000
+const SEQUENCE_STEP_BUFFER_MS = 5000
 
 export const useSerialStore = defineStore('serial', () => {
   const port = ref(null)
@@ -51,8 +57,8 @@ export const useSerialStore = defineStore('serial', () => {
         ...terminalOutput.value,
         `<span class="${cls}">${safe}</span>`
       ]
-      if (terminalOutput.value.length > 2000) {
-        terminalOutput.value = terminalOutput.value.slice(-2000)
+      if (terminalOutput.value.length > TERMINAL_MAX_LINES) {
+        terminalOutput.value = terminalOutput.value.slice(-TERMINAL_MAX_LINES)
       }
     }
   }
@@ -95,7 +101,9 @@ export const useSerialStore = defineStore('serial', () => {
     try {
       const info = port.value.getInfo?.() || {}
       lastConnectedPortInfo.value = info
-    } catch (_) { /* ignore */ }
+    } catch (e) {
+      console.warn('[serial] getInfo failed:', e.message)
+    }
     isConnected.value = true
     reconnectAttempts.value = 0
     addToTerminal('Connected', 'success')
@@ -109,18 +117,25 @@ export const useSerialStore = defineStore('serial', () => {
     _uninstallNavigatorListeners()
     readLoopActive.value = false
     if (reader.value) {
-      try { await reader.value.cancel() } catch (_) { /* ignore */ }
+      try { await reader.value.cancel() } catch (e) {
+        console.warn('[serial] reader.cancel during disconnect:', e.message)
+      }
     }
     if (listenPromise) {
-      try { await listenPromise } catch (_) { /* ignore */ }
+      try { await listenPromise } catch (e) {
+        console.warn('[serial] listen race during disconnect:', e.message)
+      }
       listenPromise = null
     }
     reader.value = null
     if (port.value) {
-      try { await port.value.close() } catch (_) { /* ignore */ }
+      try { await port.value.close() } catch (e) {
+        console.warn('[serial] port.close during disconnect:', e.message)
+      }
       port.value = null
     }
     isConnected.value = false
+    resetParserState()
     addToTerminal('Disconnected', 'error')
   }
 
@@ -189,6 +204,7 @@ export const useSerialStore = defineStore('serial', () => {
     if (isConnected.value) {
       addToTerminal('Device unplugged', 'warning')
       isConnected.value = false
+      resetParserState()
       _scheduleReconnect()
     }
   }
@@ -220,7 +236,7 @@ export const useSerialStore = defineStore('serial', () => {
         if (done) break
         if (value) {
           rawBuffer.value += txtDecoder.decode(value, { stream: true })
-          if (rawBuffer.value.length > 65536) rawBuffer.value = rawBuffer.value.slice(-32768)
+          if (rawBuffer.value.length > RAW_BUFFER_MAX) rawBuffer.value = rawBuffer.value.slice(-RAW_BUFFER_TRIM_TO)
           const lines = rawBuffer.value.split('\n')
           rawBuffer.value = lines.pop()
           for (const line of lines) {
@@ -314,7 +330,7 @@ export const useSerialStore = defineStore('serial', () => {
 
   const PROMPT_RE = /^>\s*$|^esp32marauder>\s*$/i
 
-  const sendAndWait = (command, timeout = 15000) => {
+  const sendAndWait = (command, timeout = DEFAULT_CMD_TIMEOUT_MS) => {
     return new Promise((resolve) => {
       if (isDemoMode.value || !port.value) {
         sendCommand(command)
@@ -353,9 +369,9 @@ export const useSerialStore = defineStore('serial', () => {
   const sendSequence = async (steps) => {
     for (const step of steps) {
       if (typeof step === 'string') {
-        await sendAndWait(step, 5000)
+        await sendAndWait(step, SEQUENCE_STEP_TIMEOUT_MS)
       } else if (step.command) {
-        await sendAndWait(step.command, (step.delay || 0) + 5000)
+        await sendAndWait(step.command, (step.delay || 0) + SEQUENCE_STEP_BUFFER_MS)
       } else if (step.delay) {
         addToTerminal(`Waiting ${step.delay / 1000}s...`, 'system')
         await new Promise(r => setTimeout(r, step.delay))

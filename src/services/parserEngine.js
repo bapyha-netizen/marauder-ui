@@ -9,6 +9,12 @@ const AP_MAX_AGE = 300000
 
 let intervalId = null
 
+function safeInt(value, fallback = null) {
+  if (value === null || value === undefined) return fallback
+  const n = parseInt(value, 10)
+  return Number.isNaN(n) ? fallback : n
+}
+
 export function startParser() {
   intervalId = setInterval(() => {
     const apStore = useApStore()
@@ -21,6 +27,12 @@ export function stopParser() {
     clearInterval(intervalId)
     intervalId = null
   }
+}
+
+export function resetParserState() {
+  _bleKeyCounter = 0
+  _infoAPIndex = -1
+  _ipListBuffer = []
 }
 
 export function parseLine(line) {
@@ -71,8 +83,8 @@ function parseAPBeacon(line, apStore, dashStore) {
   const essid = essidRaw.replace(/[^\x20-\x7E]/g, '').trim() || '(hidden)'
 
   apStore.updateOrAddAP({
-    rssi: parseInt(rssi),
-    channel: parseInt(ch),
+    rssi: safeInt(rssi),
+    channel: safeInt(ch),
     bssid: bssid.toUpperCase(),
     essid: essid,
     isHidden: essid === '(hidden)' || essid === bssid.toUpperCase(),
@@ -95,13 +107,13 @@ function parseAPList(line, apStore, dashStore) {
 
   const rssiMatch = essid.match(/(-?\d+)$/)
   if (rssiMatch) {
-    rssi = parseInt(rssiMatch[1])
+    rssi = safeInt(rssiMatch[1])
     essid = essid.replace(/\s*-?\d+$/, '').trim()
   }
 
   const apData = {
-    index: parseInt(index),
-    channel: parseInt(ch),
+    index: safeInt(index),
+    channel: safeInt(ch),
     essid: essid || '(hidden)',
     rssi: rssi,
     lastSeen: new Date()
@@ -124,7 +136,7 @@ function parseStationDetect(line, apStore, dashStore) {
   for (const [key, ap] of apStore.accessPoints) {
     if (ap.bssid && ap.bssid.toUpperCase() === apMac) {
       apStore.addStation(key, {
-        id: parseInt(id),
+        id: safeInt(id),
         mac: staMac
       })
       found = true
@@ -142,7 +154,7 @@ function parseStationDetect(line, apStore, dashStore) {
       lastSeen: new Date()
     })
     apStore.addStation(apMac, {
-      id: parseInt(id),
+      id: safeInt(id),
       mac: staMac
     })
   }
@@ -175,7 +187,7 @@ function parseStationList(line, apStore, dashStore) {
   const apM = line.match(apRe)
   if (apM) {
     const [, index, essid, rssi] = apM
-    dashStore.setLastStationAP(parseInt(index), essid.trim())
+    dashStore.setLastStationAP(safeInt(index), essid.trim())
     return true
   }
 
@@ -187,7 +199,7 @@ function parseStationList(line, apStore, dashStore) {
       for (const [key, ap] of apStore.accessPoints) {
         if (ap.index === apIndex) {
           apStore.addStation(key, {
-            id: parseInt(staIndex),
+            id: safeInt(staIndex),
             mac: staMac.toUpperCase(),
             isSelected: line.includes('(selected)')
           })
@@ -219,7 +231,7 @@ function parseProbeSniff(line, apStore, dashStore) {
   dashStore.addEvent('probe', `Probe: ${clientMac} -> ${ssid.trim()} Ch:${ch} RSSI:${rssi}`)
   dashStore.incrementPackets()
   const probeStore = useProbeStore()
-  probeStore.addProbe(parseInt(rssi), parseInt(ch), clientMac, ssid.trim())
+  probeStore.addProbe(safeInt(rssi), safeInt(ch), clientMac, ssid.trim())
   return true
 }
 
@@ -243,7 +255,7 @@ function parseBLESniff(line, bleStore, dashStore) {
     const isMac = MAC_RE.test(name)
     bleStore.updateOrAddDevice({
       mac: isMac ? name.toUpperCase() : `BLE:${rssi}-${++_bleKeyCounter}`,
-      rssi: parseInt(rssi),
+      rssi: safeInt(rssi),
       name: isMac ? `BLE Device ${name}` : name.trim(),
       lastSeen: new Date()
     })
@@ -256,7 +268,7 @@ function parseBLESniff(line, bleStore, dashStore) {
     const [, rssi, mac, ] = m2
     bleStore.updateOrAddDevice({
       mac: mac.toUpperCase(),
-      rssi: parseInt(rssi),
+      rssi: safeInt(rssi),
       name: `BLE ${mac}`,
       lastSeen: new Date()
     })
@@ -275,7 +287,7 @@ function parseBLEMeta(line, bleStore, dashStore) {
   const [, rssi, name] = m
   bleStore.updateOrAddDevice({
     mac: `META:${rssi}`,
-    rssi: parseInt(rssi),
+    rssi: safeInt(rssi),
     name: `Meta: ${name.trim()}`,
     isAirtag: false,
     manufacturer: 'Meta/Ray-Ban',
@@ -295,7 +307,7 @@ function parseSignalMonitor(line, apStore, dashStore) {
     if (ap.essid === essid.trim()) {
       apStore.updateOrAddAP({
         ...ap,
-        rssi: parseInt(rssi),
+        rssi: safeInt(rssi),
         lastSeen: new Date()
       })
       dashStore.addEvent('signal', line)
@@ -317,7 +329,7 @@ function parsePacketCount(line, store) {
   const [, type, count] = m
   const key = type.toLowerCase()
   if (['beacon', 'probe', 'deauth', 'eapol', 'data', 'management'].includes(key)) {
-    store.setPacketCounts({ [key]: parseInt(count) })
+    store.setPacketCounts({ [key]: safeInt(count, 0) })
     return true
   }
   return false
@@ -333,7 +345,7 @@ function parseChannelAnalyzer(line, store) {
   if (!m) return false
 
   const [, ch, count] = m
-  store.setChannelUtilization({ [parseInt(ch)]: parseInt(count) })
+  store.setChannelUtilization({ [safeInt(ch, 0)]: safeInt(count, 0) })
   return true
 }
 
@@ -343,7 +355,7 @@ function parseAPInfo(line, apStore) {
   const idxRe = /^Index:\s*(\d+)/
   const idxM = line.match(idxRe)
   if (idxM) {
-    _infoAPIndex = parseInt(idxM[1])
+    _infoAPIndex = safeInt(idxM[1], -1)
     return true
   }
   if (_infoAPIndex < 0) return false
@@ -368,13 +380,13 @@ function parseAPInfo(line, apStore) {
   const chanRe = /^Channel:\s*(\d+)/
   const chanM = line.match(chanRe)
   if (chanM) {
-    apStore.updateAP(_infoAPIndex, { channel: parseInt(chanM[1]) })
+    apStore.updateAP(_infoAPIndex, { channel: safeInt(chanM[1]) })
     return true
   }
   const rssiRe = /^RSSI:\s*(-?\d+)/
   const rssiM = line.match(rssiRe)
   if (rssiM) {
-    apStore.updateAP(_infoAPIndex, { rssi: parseInt(rssiM[1]) })
+    apStore.updateAP(_infoAPIndex, { rssi: safeInt(rssiM[1]) })
     return true
   }
   const encRe = /^Encryption:\s*(.+)/
@@ -400,7 +412,7 @@ function parseIPList(line, dashStore) {
   const [, idx, ip] = m
   const macMatch = line.match(MAC_RE)
   _ipListBuffer.push({
-    index: parseInt(idx),
+    index: safeInt(idx),
     ip,
     mac: macMatch ? macMatch[1].toUpperCase() : ''
   })
