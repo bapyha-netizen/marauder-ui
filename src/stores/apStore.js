@@ -31,6 +31,16 @@ export const useApStore = defineStore('ap', () => {
     return ch
   })
 
+  const _indexByApIndex = computed(() => {
+    const idx = new Map()
+    accessPoints.value.forEach((ap, key) => {
+      if (ap.index !== undefined && ap.index !== null) {
+        idx.set(ap.index, key)
+      }
+    })
+    return idx
+  })
+
   const avgSignal = computed(() => {
     const aps = Array.from(accessPoints.value.values()).filter(ap => ap.rssi)
     if (!aps.length) return 0
@@ -40,6 +50,7 @@ export const useApStore = defineStore('ap', () => {
   function _findExisting(ap) {
     if (ap.bssid) {
       const upper = ap.bssid.toUpperCase()
+      if (accessPoints.value.has(upper)) return upper
       for (const [k, v] of accessPoints.value.entries()) {
         if (v.bssid && v.bssid.toUpperCase() === upper) return k
       }
@@ -103,10 +114,9 @@ export const useApStore = defineStore('ap', () => {
       newAP.rssiHistory.push(newAP.rssi)
       if (newAP.rssiHistory.length > 20) newAP.rssiHistory.shift()
     }
-    const newMap = new Map(accessPoints.value)
-    if (existingKey && existingKey !== newKey) newMap.delete(existingKey)
-    newMap.set(newKey, newAP)
-    accessPoints.value = newMap
+    if (existingKey && existingKey !== newKey) accessPoints.value.delete(existingKey)
+    accessPoints.value.set(newKey, newAP)
+    triggerRef(accessPoints)
   }
 
   function addStation(apKey, station) {
@@ -120,7 +130,8 @@ export const useApStore = defineStore('ap', () => {
       stations.push({ ...station, lastSeen: new Date() })
     }
     stations.sort((a, b) => (a.id || 0) - (b.id || 0))
-    updateOrAddAP({ ...ap, stations })
+    Object.assign(ap, { stations })
+    triggerRef(accessPoints)
   }
 
   function clearAPs() {
@@ -129,35 +140,31 @@ export const useApStore = defineStore('ap', () => {
   }
 
   function clearSelected() {
-    const newMap = new Map(accessPoints.value)
-    for (const [key, ap] of newMap.entries()) {
-      newMap.set(key, { ...ap, isSelected: false })
+    for (const [key, ap] of accessPoints.value.entries()) {
+      accessPoints.value.set(key, { ...ap, isSelected: false })
     }
-    accessPoints.value = newMap
+    triggerRef(accessPoints)
   }
 
   function updateAP(index, data) {
-    for (const [key, ap] of accessPoints.value.entries()) {
-      if (ap.index === index) {
-        const newMap = new Map(accessPoints.value)
-        newMap.set(key, { ...ap, ...data })
-        accessPoints.value = newMap
-        return
-      }
-    }
+    const key = _indexByApIndex.value.get(index)
+    if (!key) return
+    const ap = accessPoints.value.get(key)
+    if (!ap) return
+    Object.assign(ap, data)
+    triggerRef(accessPoints)
   }
 
   function removeOldAPs(maxAgeMs = 300000) {
     const now = Date.now()
-    const newMap = new Map(accessPoints.value)
     let changed = false
-    for (const [key, ap] of newMap.entries()) {
+    for (const [key, ap] of accessPoints.value.entries()) {
       if (now - new Date(ap.lastSeen).getTime() > maxAgeMs) {
-        newMap.delete(key)
+        accessPoints.value.delete(key)
         changed = true
       }
     }
-    if (changed) accessPoints.value = newMap
+    if (changed) triggerRef(accessPoints)
   }
 
   function exportData() {
@@ -173,10 +180,19 @@ export const useApStore = defineStore('ap', () => {
 
   function findAPByBSSID(bssid) {
     const upper = bssid.toUpperCase()
+    const direct = accessPoints.value.get(upper)
+    if (direct) return { key: upper, ap: direct }
     for (const [key, ap] of accessPoints.value.entries()) {
       if (ap.bssid && ap.bssid.toUpperCase() === upper) return { key, ap }
     }
     return null
+  }
+
+  function findAPByIndex(index) {
+    const key = _indexByApIndex.value.get(index)
+    if (!key) return null
+    const ap = accessPoints.value.get(key)
+    return ap ? { key, ap } : null
   }
 
   watch(accessPoints, (map) => {
@@ -190,13 +206,12 @@ export const useApStore = defineStore('ap', () => {
   async function hydrate() {
     const saved = await loadStore(PERSIST_KEY)
     if (!saved || saved.length === 0) return
-    const existing = accessPoints.value
-    const hasExisting = existing.size > 0
-    const merged = hasExisting ? new Map(existing) : new Map()
+    const current = accessPoints.value
+    let changed = false
     for (const ap of saved) {
       const key = ap.bssid || ap.id
       if (!key) continue
-      if (merged.has(key)) continue
+      if (current.has(key)) continue
       const restored = { ...ap, lastSeen: ap.lastSeen ? new Date(ap.lastSeen) : new Date() }
       if (restored.stations) {
         restored.stations = restored.stations.map(s => ({
@@ -208,16 +223,17 @@ export const useApStore = defineStore('ap', () => {
         restored.rssiHistory = [...restored.rssiHistory]
       }
       delete restored.id
-      merged.set(key, restored)
+      current.set(key, restored)
+      changed = true
     }
-    accessPoints.value = merged
+    if (changed) triggerRef(accessPoints)
   }
 
   return {
     accessPoints, sortedAPs, apCount, totalStations,
     apByChannel, avgSignal,
     updateOrAddAP, addStation, clearAPs, clearSelected,
-    updateAP, removeOldAPs, exportData, findAPByBSSID,
+    updateAP, removeOldAPs, exportData, findAPByBSSID, findAPByIndex,
     hydrate
   }
 })

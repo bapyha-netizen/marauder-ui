@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { shallowRef, computed, watch } from 'vue'
+import { shallowRef, triggerRef, computed, watch } from 'vue'
 import { debouncedSave, loadStore, clearPersistedStore } from '../utils/persist'
 
 const PERSIST_KEY = 'bleDevices'
@@ -16,9 +16,9 @@ export const useBleStore = defineStore('ble', () => {
 
   function updateOrAddDevice(dev) {
     const now = new Date()
-    const newMap = new Map(devices.value)
-    const existing = newMap.get(dev.mac)
-    newMap.set(dev.mac, {
+    const map = devices.value
+    const existing = map.get(dev.mac)
+    map.set(dev.mac, {
       mac: dev.mac,
       name: dev.name || existing?.name || 'Unknown',
       rssi: dev.rssi ?? existing?.rssi,
@@ -31,10 +31,10 @@ export const useBleStore = defineStore('ble', () => {
       packetCount: (existing?.packetCount || 0) + 1
     })
     const cutoff = Date.now() - 300000
-    for (const [mac, d] of newMap.entries()) {
-      if (d.lastSeen.getTime() < cutoff) newMap.delete(mac)
+    for (const [mac, d] of map.entries()) {
+      if (d.lastSeen.getTime() < cutoff) map.delete(mac)
     }
-    devices.value = newMap
+    triggerRef(devices)
   }
 
   function clearDevices() {
@@ -59,21 +59,22 @@ export const useBleStore = defineStore('ble', () => {
   async function hydrate() {
     const saved = await loadStore(PERSIST_KEY)
     if (!saved || saved.length === 0) return
-    const existing = devices.value
-    const merged = existing.size > 0 ? new Map(existing) : new Map()
+    const current = devices.value
+    let changed = false
     for (const dev of saved) {
       const key = dev.mac || dev.id
       if (!key) continue
-      if (merged.has(key)) continue
+      if (current.has(key)) continue
       const restored = {
         ...dev,
         firstSeen: dev.firstSeen ? new Date(dev.firstSeen) : new Date(),
         lastSeen: dev.lastSeen ? new Date(dev.lastSeen) : new Date()
       }
       delete restored.id
-      merged.set(key, restored)
+      current.set(key, restored)
+      changed = true
     }
-    devices.value = merged
+    if (changed) triggerRef(devices)
   }
 
   return {

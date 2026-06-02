@@ -68,7 +68,8 @@ describe('parseLine — ESP32 Marauder output parser', () => {
 
     it('emits beacon event', () => {
       parseLine('-60 Ch: 6 AA:BB:CC:11:22:33 ESSID: Test')
-      expect(dashStore.events[0].type).toBe('beacon')
+      const ev = dashStore.events
+      expect(ev[ev.length - 1].type).toBe('beacon')
     })
   })
 
@@ -168,7 +169,8 @@ describe('parseLine — ESP32 Marauder output parser', () => {
     it('parses deauth packet', () => {
       parseLine('-65 Ch: 6 AA:BB:CC:11:22:33 -> 00:11:22:33:44:55')
       expect(dashStore.packetsCaptured).toBe(1)
-      expect(dashStore.events[0].type).toBe('deauth')
+      const ev = dashStore.events
+      expect(ev[ev.length - 1].type).toBe('deauth')
     })
 
     it('parses multiple deauth packets', () => {
@@ -198,7 +200,8 @@ describe('parseLine — ESP32 Marauder output parser', () => {
     it('parses EAPOL capture', () => {
       parseLine('Received EAPOL: AA:BB:CC:11:22:33')
       expect(dashStore.packetsCaptured).toBe(1)
-      expect(dashStore.events[0].type).toBe('pmkid')
+      const ev = dashStore.events
+      expect(ev[ev.length - 1].type).toBe('pmkid')
     })
 
     it('ignores non-PMKID lines', () => {
@@ -209,7 +212,8 @@ describe('parseLine — ESP32 Marauder output parser', () => {
     it('parses PMKID captured line', () => {
       parseLine('PMKID captured: AA:BB:CC:11:22:33')
       expect(dashStore.packetsCaptured).toBe(1)
-      expect(dashStore.events[0].type).toBe('pmkid')
+      const ev = dashStore.events
+      expect(ev[ev.length - 1].type).toBe('pmkid')
     })
   })
 
@@ -395,17 +399,20 @@ describe('parseLine — ESP32 Marauder output parser', () => {
   describe('parseSystemMsg', () => {
     it('parses [INFO] message', () => {
       parseLine('[INFO] System initialized')
-      expect(dashStore.events[0].type).toBe('system')
+      const ev = dashStore.events
+      expect(ev[ev.length - 1].type).toBe('system')
     })
 
     it('parses [WARN] message', () => {
       parseLine('[WARN] Low battery')
-      expect(dashStore.events[0].type).toBe('system')
+      const ev = dashStore.events
+      expect(ev[ev.length - 1].type).toBe('system')
     })
 
     it('parses [ERROR] message', () => {
       parseLine('[ERROR] Failed to connect')
-      expect(dashStore.events[0].type).toBe('system')
+      const ev = dashStore.events
+      expect(ev[ev.length - 1].type).toBe('system')
     })
 
     it('parses action messages', () => {

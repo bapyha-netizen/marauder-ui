@@ -21,6 +21,8 @@ export const useDashboardStore = defineStore('dashboard', () => {
     return `${m}m ${s}s`
   })
 
+  const eventsReversed = computed(() => [...events.value].reverse())
+
   let tickInterval = null
 
   function startTick() {
@@ -41,8 +43,8 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   function addEvent(type, data) {
-    events.value.unshift({ type, data, time: new Date() })
-    if (events.value.length > 200) events.value.pop()
+    events.value.push({ type, data, time: new Date() })
+    if (events.value.length > 200) events.value.shift()
     triggerRef(events)
   }
 
@@ -82,7 +84,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   return {
-    commandsSent, packetsCaptured, sessionStart, events,
+    commandsSent, packetsCaptured, sessionStart, events, eventsReversed,
     sessionDuration, lastStationAPIndex, lastStationAPName,
     packetCounts, channelUtilization, ipList,
     incrementCommands, incrementPackets,

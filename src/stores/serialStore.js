@@ -1,8 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref, shallowRef } from 'vue'
+import { ref, shallowRef, triggerRef } from 'vue'
 import { useApStore } from './apStore'
 import { parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil, resetParserState } from '../services/parserEngine'
-import { escHtml } from '../utils/format'
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000]
 const MAX_RECONNECT_ATTEMPTS = 6
@@ -29,6 +28,8 @@ export const useSerialStore = defineStore('serial', () => {
   let _lineHandlers = []
   let _reconnectTimer = null
   let _navigatorListeners = null
+  let _pendingLines = []
+  let _microtaskScheduled = false
 
   const onLine = (handler) => {
     _lineHandlers.push(handler)
@@ -36,13 +37,23 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   const _notifyLine = (text) => {
-    for (const h of _lineHandlers) h(text)
+    _pendingLines.push(text)
+    if (!_microtaskScheduled) {
+      _microtaskScheduled = true
+      queueMicrotask(() => {
+        const batch = _pendingLines
+        _pendingLines = []
+        _microtaskScheduled = false
+        for (const h of _lineHandlers) {
+          for (const line of batch) h(line)
+        }
+      })
+    }
   }
 
   const addToTerminal = (text, type = 'normal') => {
     if (text.trim()) {
       _notifyLine(text)
-      const safe = escHtml(text)
       const types = {
         normal: 'text-green-400',
         success: 'text-blue-400',
@@ -52,14 +63,11 @@ export const useSerialStore = defineStore('serial', () => {
         data: 'text-purple-400',
         system: 'text-cyan-400'
       }
-      const cls = types[type] || types.normal
-      terminalOutput.value = [
-        ...terminalOutput.value,
-        `<span class="${cls}">${safe}</span>`
-      ]
+      terminalOutput.value.push({ text, cls: types[type] || types.normal })
       if (terminalOutput.value.length > TERMINAL_MAX_LINES) {
-        terminalOutput.value = terminalOutput.value.slice(-TERMINAL_MAX_LINES)
+        terminalOutput.value.shift()
       }
+      triggerRef(terminalOutput)
     }
   }
 

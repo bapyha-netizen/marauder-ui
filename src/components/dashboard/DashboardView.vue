@@ -29,8 +29,9 @@
         </div>
         <div ref="liveRef" @scroll="onTerminalScroll"
           class="flex-1 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed scrollbar-thin bg-black/30">
-          <div v-for="(line, i) in serialStore.terminalOutput" :key="i" v-html="line"
-            class="hover:bg-white/5 rounded px-1 -mx-1"></div>
+          <div v-for="line in serialStore.terminalOutput" :key="line.text"
+            class="hover:bg-white/5 rounded px-1 -mx-1 terminal-line"
+            :class="line.cls">{{ line.text }}</div>
           <div v-if="!serialStore.terminalOutput.length" class="text-slate-600 text-center py-8">
             Waiting for data...
           </div>
@@ -522,7 +523,7 @@ watch(activeTab, (tab) => {
 watch(() => serialStore.terminalOutput.length, () => {
   if (paused.value) return
   if (!autoScroll.value) return
-  nextTick(() => {
+  requestAnimationFrame(() => {
     if (liveRef.value) liveRef.value.scrollTop = liveRef.value.scrollHeight
   })
 })
@@ -536,7 +537,7 @@ const onTerminalScroll = () => {
 
 const copyTerminal = async () => {
   const text = serialStore.terminalOutput
-    .map(line => line.replace(/<[^>]+>/g, ''))
+    .map(line => line.text || line)
     .join('\n')
   if (!text) return
   const ok = await copyToClipboard(text)
@@ -550,5 +551,9 @@ const copyTerminal = async () => {
   -webkit-line-clamp: 6;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+.terminal-line {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 18px;
 }
 </style>

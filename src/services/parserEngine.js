@@ -44,24 +44,44 @@ export function parseLine(line) {
   const trimmed = line.trim()
 
   if (trimmed.startsWith('> ')) return
-  if (trimmed.startsWith('#')) return
+  if (trimmed.startsWith('#')) {
+    parseSystemMsg(trimmed, dashStore)
+    return
+  }
 
-  if (parseAPBeacon(trimmed, apStore, dashStore)) return
-  if (parseAPList(trimmed, apStore, dashStore)) return
-  if (parseStationDetect(trimmed, apStore, dashStore)) return
-  if (parseStationList(trimmed, apStore, dashStore)) return
-  if (parseDeauthSniff(trimmed, apStore, dashStore)) return
-  if (parseProbeSniff(trimmed, apStore, dashStore)) return
-  if (parsePMKID(trimmed, apStore, dashStore)) return
-  if (parseBLESniff(trimmed, bleStore, dashStore)) return
-  if (parseBLEMeta(trimmed, bleStore, dashStore)) return
-  if (parseSignalMonitor(trimmed, apStore, dashStore)) return
-  if (parsePacketCount(trimmed, dashStore)) return
-  if (parseChannelAnalyzer(trimmed, dashStore)) return
-  if (parseAPInfo(trimmed, apStore, dashStore)) return
-  if (parseIPList(trimmed, dashStore)) return
-  if (parseSystemMsg(trimmed, dashStore)) return
+  const first = trimmed.charCodeAt(0)
+  const parserFn = _DISPATCH[first]
+  if (parserFn && parserFn(trimmed, apStore, bleStore, dashStore)) return
+  for (let i = 0; i < _FALLBACK_PARSERS.length; i++) {
+    if (_FALLBACK_PARSERS[i](trimmed, apStore, bleStore, dashStore)) return
+  }
 }
+
+const _DISPATCH = {
+  45: (l, ap, ble, dash) => parseAPBeacon(l, ap, dash) || parseDeauthSniff(l, ap, dash) || parseProbeSniff(l, ap, dash) || parseBLESniff(l, ble, dash),
+  91: (l, ap, ble, dash) => parseAPList(l, ap, dash) || parseStationList(l, ap, dash) || parseIPList(l, dash) || parseSystemMsg(l, dash),
+  82: (l, ap, ble, dash) => parsePMKID(l, ap, dash) || parseAPInfo(l, ap, dash) || parseSystemMsg(l, dash),
+  80: (l, ap, ble, dash) => parsePMKID(l, ap, dash) || parsePacketCount(l, dash) || parseSystemMsg(l, dash),
+  77: (l, ap, ble, dash) => parseBLEMeta(l, ble, dash) || parsePacketCount(l, dash) || parseSystemMsg(l, dash),
+  73: (l, ap, ble, dash) => parseIPList(l, dash) || parseAPInfo(l, ap, dash) || parseSystemMsg(l, dash),
+  66: (l, ap, ble, dash) => parseAPInfo(l, ap, dash) || parsePacketCount(l, dash) || parseSystemMsg(l, dash),
+  67: (l, ap, ble, dash) => parseChannelAnalyzer(l, dash) || parseAPInfo(l, ap, dash) || parseSystemMsg(l, dash),
+  83: (l, ap, ble, dash) => parseAPInfo(l, ap, dash) || parseSystemMsg(l, dash),
+  86: (l, ap, ble, dash) => parseAPInfo(l, ap, dash) || parseSystemMsg(l, dash),
+  69: (l, ap, ble, dash) => parseAPInfo(l, ap, dash) || parseSystemMsg(l, dash),
+  76: (l, ap, ble, dash) => parseAPInfo(l, ap, dash) || parseSystemMsg(l, dash),
+  98: (l, ap, ble, dash) => parsePacketCount(l, dash) || parseSystemMsg(l, dash),
+  112: (l, ap, ble, dash) => parsePacketCount(l, dash) || parseSystemMsg(l, dash),
+  100: (l, ap, ble, dash) => parsePacketCount(l, dash) || parseSystemMsg(l, dash),
+  101: (l, ap, ble, dash) => parsePacketCount(l, dash) || parseSystemMsg(l, dash),
+  109: (l, ap, ble, dash) => parsePacketCount(l, dash) || parseSystemMsg(l, dash),
+}
+
+const _FALLBACK_PARSERS = [
+  (l, ap, ble, dash) => parseStationDetect(l, ap, dash),
+  (l, ap, ble, dash) => parseSignalMonitor(l, ap, dash),
+  (l, ap, ble, dash) => parseSystemMsg(l, dash),
+]
 
 const MAC_RE = /([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})/
 
@@ -132,19 +152,13 @@ function parseStationDetect(line, apStore, dashStore) {
   const apMac = firstType === 'ap' ? firstMac.toUpperCase() : secondMac.toUpperCase()
   const staMac = firstType === 'sta' ? firstMac.toUpperCase() : secondMac.toUpperCase()
 
-  let found = false
-  for (const [key, ap] of apStore.accessPoints) {
-    if (ap.bssid && ap.bssid.toUpperCase() === apMac) {
-      apStore.addStation(key, {
-        id: safeInt(id),
-        mac: staMac
-      })
-      found = true
-      break
-    }
-  }
-
-  if (!found) {
+  const found = apStore.findAPByBSSID(apMac)
+  if (found) {
+    apStore.addStation(found.key, {
+      id: safeInt(id),
+      mac: staMac
+    })
+  } else {
     apStore.updateOrAddAP({
       essid: '(unknown)',
       bssid: apMac,
@@ -196,16 +210,14 @@ function parseStationList(line, apStore, dashStore) {
     const [, staIndex, staMac, ] = staM
     const apIndex = dashStore.lastStationAPIndex
     if (apIndex !== undefined) {
-      for (const [key, ap] of apStore.accessPoints) {
-        if (ap.index === apIndex) {
-          apStore.addStation(key, {
-            id: safeInt(staIndex),
-            mac: staMac.toUpperCase(),
-            isSelected: line.includes('(selected)')
-          })
-          dashStore.addEvent('station', line)
-          break
-        }
+      const found = apStore.findAPByIndex(apIndex)
+      if (found) {
+        apStore.addStation(found.key, {
+          id: safeInt(staIndex),
+          mac: staMac.toUpperCase(),
+          isSelected: line.includes('(selected)')
+        })
+        dashStore.addEvent('station', line)
       }
     }
     return true
