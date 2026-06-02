@@ -205,6 +205,12 @@ describe('parseLine — ESP32 Marauder output parser', () => {
       parseLine('Some random line without EAPOL')
       expect(dashStore.packetsCaptured).toBe(0)
     })
+
+    it('parses PMKID captured line', () => {
+      parseLine('PMKID captured: AA:BB:CC:11:22:33')
+      expect(dashStore.packetsCaptured).toBe(1)
+      expect(dashStore.events[0].type).toBe('pmkid')
+    })
   })
 
   describe('parseBLESniff', () => {
@@ -336,6 +342,37 @@ describe('parseLine — ESP32 Marauder output parser', () => {
       expect(ap.vendor).toBe('TestVendor')
       expect(ap.channel).toBe(6)
       expect(ap.rssi).toBe(-65)
+    })
+
+    it('parses ESSID field in info', () => {
+      apStore.updateOrAddAP({
+        index: 2,
+        bssid: 'AA:BB:CC:11:22:44',
+        essid: 'OldName',
+        channel: 1,
+        rssi: -50
+      })
+      parseLine('Index: 2')
+      parseLine('BSSID: AA:BB:CC:11:22:44')
+      parseLine('ESSID: NewNetwork')
+      const ap = apStore.accessPoints.get('AA:BB:CC:11:22:44')
+      expect(ap.essid).toBe('NewNetwork')
+    })
+
+    it('handles Last seen / Stations fields without error', () => {
+      apStore.updateOrAddAP({
+        index: 3,
+        bssid: 'AA:BB:CC:11:22:55',
+        essid: 'Test',
+        channel: 1,
+        rssi: -50
+      })
+      parseLine('Index: 3')
+      parseLine('BSSID: AA:BB:CC:11:22:55')
+      parseLine('Last seen: 5s')
+      parseLine('Stations: 3')
+      const ap = apStore.accessPoints.get('AA:BB:CC:11:22:55')
+      expect(ap).toBeDefined()
     })
   })
 

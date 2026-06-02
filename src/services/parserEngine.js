@@ -244,6 +244,13 @@ function parsePMKID(line, apStore, dashStore) {
       return true
     }
   }
+  const pmkidCapturedRe = /^PMKID captured:\s*([0-9A-Fa-f:]{17})/
+  const pmkidCapturedM = line.match(pmkidCapturedRe)
+  if (pmkidCapturedM) {
+    dashStore.addEvent('pmkid', `PMKID captured: ${pmkidCapturedM[1].toUpperCase()}`)
+    dashStore.incrementPackets()
+    return true
+  }
   return false
 }
 
@@ -393,6 +400,22 @@ function parseAPInfo(line, apStore) {
   const encM = line.match(encRe)
   if (encM) {
     apStore.updateAP(_infoAPIndex, { encryption: encM[1].trim() })
+    return true
+  }
+  const essidRe = /^ESSID:\s*(.+)/
+  const essidM = line.match(essidRe)
+  if (essidM) {
+    apStore.updateAP(_infoAPIndex, { essid: essidM[1].trim() })
+    return true
+  }
+  const lastSeenRe = /^Last seen:\s*(.+)/
+  const lastSeenM = line.match(lastSeenRe)
+  if (lastSeenM) {
+    return true
+  }
+  const stationsRe = /^Stations:\s*(\d+)/
+  const stationsM = line.match(stationsRe)
+  if (stationsM) {
     return true
   }
   _infoAPIndex = -1
