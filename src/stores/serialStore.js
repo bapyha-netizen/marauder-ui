@@ -2,34 +2,31 @@ import { defineStore } from 'pinia'
 import { ref, shallowRef, triggerRef } from 'vue'
 import { useApStore } from './apStore'
 import { parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil, resetParserState } from '../services/parserEngine'
+import { sanitizeText } from '../utils/sanitize'
+import { logger } from '../utils/logger'
+import { metrics } from '../utils/metrics'
+import { createSerialReader } from '../services/serialReader'
+import { createCommandExecutor } from '../services/commandExecutor'
+import { createReconnectManager } from '../services/serialReconnect'
 
-const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000]
-const MAX_RECONNECT_ATTEMPTS = 6
 const TERMINAL_MAX_LINES = 2000
-const RAW_BUFFER_MAX = 65536
-const RAW_BUFFER_TRIM_TO = 32768
-const DEFAULT_CMD_TIMEOUT_MS = 15000
-const SEQUENCE_STEP_TIMEOUT_MS = 5000
-const SEQUENCE_STEP_BUFFER_MS = 5000
 
 export const useSerialStore = defineStore('serial', () => {
   const port = ref(null)
-  const reader = ref(null)
-  const readLoopActive = ref(false)
   const isConnected = ref(false)
   const isDemoMode = ref(false)
   const terminalOutput = shallowRef([])
-  const rawBuffer = ref('')
   const baudRate = ref(115200)
   const autoReconnect = ref(true)
   const reconnectAttempts = ref(0)
   const lastConnectedPortInfo = ref(null)
-  let listenPromise = null
+
   let _lineHandlers = []
-  let _reconnectTimer = null
-  let _navigatorListeners = null
   let _pendingLines = []
   let _microtaskScheduled = false
+
+  const reader = createSerialReader()
+  let _reconnect = null
 
   const onLine = (handler) => {
     _lineHandlers.push(handler)
@@ -51,255 +48,31 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  const TERMINAL_TYPES = {
+    normal: 'text-green-400',
+    success: 'text-blue-400',
+    error: 'text-red-500',
+    command: 'text-yellow-400',
+    warning: 'text-orange-400',
+    data: 'text-purple-400',
+    system: 'text-cyan-400'
+  }
+
   const addToTerminal = (text, type = 'normal') => {
-    if (text.trim()) {
-      _notifyLine(text)
-      const types = {
-        normal: 'text-green-400',
-        success: 'text-blue-400',
-        error: 'text-red-500',
-        command: 'text-yellow-400',
-        warning: 'text-orange-400',
-        data: 'text-purple-400',
-        system: 'text-cyan-400'
-      }
-      terminalOutput.value.push({ text, cls: types[type] || types.normal })
-      if (terminalOutput.value.length > TERMINAL_MAX_LINES) {
-        terminalOutput.value.shift()
-      }
-      triggerRef(terminalOutput)
+    const safe = sanitizeText(text, { maxLength: 8192 })
+    if (!safe) return
+    _notifyLine(safe)
+    const cls = TERMINAL_TYPES[type] || TERMINAL_TYPES.normal
+    terminalOutput.value.push({ text: safe, cls })
+    metrics.inc('terminalPushes', 1)
+    if (terminalOutput.value.length > TERMINAL_MAX_LINES) {
+      terminalOutput.value.shift()
     }
-  }
-
-  const connect = async (portArg = null) => {
-    if (!navigator.serial) {
-      throw new Error('Web Serial API not supported — use Chrome or Edge with HTTPS')
-    }
-    if (!portArg) {
-      try {
-        port.value = await navigator.serial.requestPort({
-          filters: [
-            { usbVendorId: 0x10C4, usbProductId: 0xEA60 },
-            { usbVendorId: 0x1A86, usbProductId: 0x7523 },
-            { usbVendorId: 0x0403, usbProductId: 0x6001 },
-            { usbVendorId: 0x1A86, usbProductId: 0x55D4 },
-            { usbVendorId: 0x303A, usbProductId: 0x1001 },
-          ]
-        })
-      } catch (e) {
-        if (e.name === 'NotFoundError') {
-          throw new Error('No device selected. Make sure ESP32 is connected and drivers installed (CP210x/CH340).')
-        }
-        throw e
-      }
-    } else {
-      port.value = portArg
-    }
-    try {
-      await port.value.open({ baudRate: baudRate.value })
-    } catch (e) {
-      port.value = null
-      throw new Error(`Failed to open serial port: ${e.message}. Check baud rate (${baudRate.value}) and USB connection.`)
-    }
-    if (!port.value.readable) {
-      await port.value.close()
-      port.value = null
-      throw new Error('Serial port has no readable stream (try a different USB port)')
-    }
-    try {
-      const info = port.value.getInfo?.() || {}
-      lastConnectedPortInfo.value = info
-    } catch (e) {
-      console.warn('[serial] getInfo failed:', e.message)
-    }
-    isConnected.value = true
-    reconnectAttempts.value = 0
-    addToTerminal('Connected', 'success')
-    _installNavigatorListeners()
-    listenPromise = listen()
-    return true
-  }
-
-  const disconnect = async () => {
-    _cancelReconnect()
-    _uninstallNavigatorListeners()
-    readLoopActive.value = false
-    if (reader.value) {
-      try { await reader.value.cancel() } catch (e) {
-        console.warn('[serial] reader.cancel during disconnect:', e.message)
-      }
-    }
-    if (listenPromise) {
-      try { await listenPromise } catch (e) {
-        console.warn('[serial] listen race during disconnect:', e.message)
-      }
-      listenPromise = null
-    }
-    reader.value = null
-    if (port.value) {
-      try { await port.value.close() } catch (e) {
-        console.warn('[serial] port.close during disconnect:', e.message)
-      }
-      port.value = null
-    }
-    isConnected.value = false
-    resetParserState()
-    addToTerminal('Disconnected', 'error')
-  }
-
-  const _cancelReconnect = () => {
-    if (_reconnectTimer) {
-      clearTimeout(_reconnectTimer)
-      _reconnectTimer = null
-    }
-  }
-
-  const _scheduleReconnect = () => {
-    if (!autoReconnect.value) return
-    if (reconnectAttempts.value >= MAX_RECONNECT_ATTEMPTS) {
-      addToTerminal(`Auto-reconnect: gave up after ${MAX_RECONNECT_ATTEMPTS} attempts. Click Connect to retry.`, 'error')
-      return
-    }
-    const delay = RECONNECT_DELAYS[Math.min(reconnectAttempts.value, RECONNECT_DELAYS.length - 1)]
-    const attempt = reconnectAttempts.value + 1
-    addToTerminal(`Auto-reconnect: attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS} in ${delay / 1000}s...`, 'warning')
-    _reconnectTimer = setTimeout(async () => {
-      _reconnectTimer = null
-      reconnectAttempts.value = attempt
-      try {
-        let targetPort = null
-        const ports = await navigator.serial.getPorts()
-        if (lastConnectedPortInfo.value) {
-          targetPort = ports.find(p => {
-            const info = p.getInfo?.()
-            if (!info || !lastConnectedPortInfo.value) return false
-            return info.usbVendorId === lastConnectedPortInfo.value.usbVendorId
-              && info.usbProductId === lastConnectedPortInfo.value.usbProductId
-          })
-        }
-        if (!targetPort && ports.length > 0) targetPort = ports[0]
-        if (!targetPort) {
-          addToTerminal('Auto-reconnect: no authorized port found, click Connect', 'warning')
-          return
-        }
-        await connect(targetPort)
-        addToTerminal(`Auto-reconnect: reconnected on attempt ${attempt}`, 'success')
-      } catch (e) {
-        addToTerminal(`Auto-reconnect: ${e.message}`, 'error')
-        _scheduleReconnect()
-      }
-    }, delay)
-  }
-
-  const _onDeviceConnect = (event) => {
-    if (isConnected.value || isDemoMode.value) return
-    if (!autoReconnect.value) return
-    const newPort = event.port
-    const newInfo = newPort.getInfo?.() || {}
-    if (lastConnectedPortInfo.value
-      && newInfo.usbVendorId === lastConnectedPortInfo.value.usbVendorId
-      && newInfo.usbProductId === lastConnectedPortInfo.value.usbProductId) {
-      addToTerminal('Device plugged in — attempting immediate reconnect', 'system')
-      _cancelReconnect()
-      reconnectAttempts.value = 0
-      connect(newPort).catch(e => {
-        addToTerminal(`Reconnect failed: ${e.message}`, 'error')
-      })
-    }
-  }
-
-  const _onDeviceDisconnect = () => {
-    if (isConnected.value) {
-      addToTerminal('Device unplugged', 'warning')
-      isConnected.value = false
-      resetParserState()
-      _scheduleReconnect()
-    }
-  }
-
-  const _installNavigatorListeners = () => {
-    if (!navigator.serial || _navigatorListeners) return
-    const connHandler = _onDeviceConnect
-    const discHandler = _onDeviceDisconnect
-    navigator.serial.addEventListener('connect', connHandler)
-    navigator.serial.addEventListener('disconnect', discHandler)
-    _navigatorListeners = { connHandler, discHandler }
-  }
-
-  const _uninstallNavigatorListeners = () => {
-    if (!navigator.serial || !_navigatorListeners) return
-    navigator.serial.removeEventListener('connect', _navigatorListeners.connHandler)
-    navigator.serial.removeEventListener('disconnect', _navigatorListeners.discHandler)
-    _navigatorListeners = null
-  }
-
-  const listen = async () => {
-    if (!port.value || !port.value.readable) return
-    readLoopActive.value = true
-    try {
-      const txtDecoder = new TextDecoder()
-      reader.value = port.value.readable.getReader()
-      while (readLoopActive.value) {
-        const { value, done } = await reader.value.read()
-        if (done) break
-        if (value) {
-          rawBuffer.value += txtDecoder.decode(value, { stream: true })
-          if (rawBuffer.value.length > RAW_BUFFER_MAX) rawBuffer.value = rawBuffer.value.slice(-RAW_BUFFER_TRIM_TO)
-          const lines = rawBuffer.value.split('\n')
-          rawBuffer.value = lines.pop()
-          for (const line of lines) {
-            if (line.trim()) addToTerminal(line.trim())
-          }
-        }
-      }
-    } catch (e) {
-      if (readLoopActive.value) {
-        addToTerminal(`Read error: ${e.message}`, 'error')
-        isConnected.value = false
-        _scheduleReconnect()
-      }
-    } finally {
-      reader.value = null
-      readLoopActive.value = false
-    }
-  }
-
-  const sendCommand = async (command) => {
-    if (!command) return false
-    if (command === 'clearlist -a') {
-      useApStore().clearAPs()
-    } else if (command === 'clearlist -c') {
-      useApStore().clearSelected()
-    }
-    if (isDemoMode.value) {
-      addToTerminal(`> ${command}`, 'command')
-      _simulateDemoCommand(command)
-      return true
-    }
-    if (!port.value) {
-      addToTerminal('Not connected', 'error')
-      return false
-    }
-    try {
-      if (!port.value.writable) {
-        addToTerminal('Port is not writable', 'error')
-        return false
-      }
-      const writer = port.value.writable.getWriter()
-      try {
-        await writer.write(new TextEncoder().encode(command + '\n'))
-        addToTerminal(`> ${command}`, 'command')
-        return true
-      } finally {
-        writer.releaseLock()
-      }
-    } catch (e) {
-      addToTerminal(`Failed: ${e.message}`, 'error')
-      return false
-    }
+    triggerRef(terminalOutput)
   }
 
   const _simulateDemoCommand = (command) => {
+    const apStore = useApStore()
     const genMAC = () => Array.from({length:6},()=>Math.floor(Math.random()*256).toString(16).padStart(2,'0')).join(':').toUpperCase()
     const genRSSI = () => -(Math.floor(Math.random()*40)+40)
     const genCH = () => Math.floor(Math.random()*13)+1
@@ -332,58 +105,119 @@ export const useSerialStore = defineStore('serial', () => {
     if (command.startsWith('stopscan')) { addToTerminal('Scanning stopped', 'system') }
     if (command.startsWith('clearlist')) {
       addToTerminal('List cleared', 'system')
-      if (command.includes('-a')) useApStore().clearAPs()
+      if (command.includes('-a')) apStore.clearAPs()
     }
   }
 
-  const PROMPT_RE = /^>\s*$|^esp32marauder>\s*$/i
-
-  const sendAndWait = (command, timeout = DEFAULT_CMD_TIMEOUT_MS) => {
-    return new Promise((resolve) => {
-      if (isDemoMode.value || !port.value) {
-        sendCommand(command)
-        setTimeout(resolve, Math.min(timeout, 500))
-        return
+  const _buildConnect = (targetPort) => async (portArg = null) => {
+    if (!navigator.serial) {
+      throw new Error('Web Serial API not supported — use Chrome or Edge with HTTPS')
+    }
+    let next = portArg
+    if (!next) {
+      try {
+        next = await navigator.serial.requestPort({
+          filters: [
+            { usbVendorId: 0x10C4, usbProductId: 0xEA60 },
+            { usbVendorId: 0x1A86, usbProductId: 0x7523 },
+            { usbVendorId: 0x0403, usbProductId: 0x6001 },
+            { usbVendorId: 0x1A86, usbProductId: 0x55D4 },
+            { usbVendorId: 0x303A, usbProductId: 0x1001 },
+          ]
+        })
+      } catch (e) {
+        if (e.name === 'NotFoundError') {
+          throw new Error('No device selected. Make sure ESP32 is connected and drivers installed (CP210x/CH340).')
+        }
+        throw e
       }
-      const echo = `> ${command}`
-      let resolved = false
-      const unsub = onLine((line) => {
-        if (!resolved && line !== echo && PROMPT_RE.test(line)) {
-          resolved = true
-          unsub()
-          clearTimeout(timer)
-          resolve()
-        }
-      })
-      const timer = setTimeout(() => {
-        if (!resolved) {
-          resolved = true
-          unsub()
-          addToTerminal(`Timed out waiting for prompt after: ${command}`, 'warning')
-          resolve()
-        }
-      }, timeout)
-      sendCommand(command).then(sent => {
-        if (!sent && !resolved) {
-          resolved = true
-          unsub()
-          clearTimeout(timer)
-          resolve()
-        }
-      })
-    })
+    }
+    port.value = next
+    try {
+      await port.value.open({ baudRate: baudRate.value })
+    } catch (e) {
+      port.value = null
+      throw new Error(`Failed to open serial port: ${e.message}. Check baud rate (${baudRate.value}) and USB connection.`)
+    }
+    if (!port.value.readable) {
+      await port.value.close()
+      port.value = null
+      throw new Error('Serial port has no readable stream (try a different USB port)')
+    }
+    try {
+      const info = port.value.getInfo?.() || {}
+      lastConnectedPortInfo.value = info
+    } catch (e) {
+      logger.warn('port.getInfo failed', e?.message, 'serial')
+    }
+    isConnected.value = true
+    reconnectAttempts.value = 0
+    addToTerminal('Connected', 'success')
+    _reconnect.installListeners()
+    await reader.start(port.value, addToTerminal)
+    return true
   }
 
-  const sendSequence = async (steps) => {
-    for (const step of steps) {
-      if (typeof step === 'string') {
-        await sendAndWait(step, SEQUENCE_STEP_TIMEOUT_MS)
-      } else if (step.command) {
-        await sendAndWait(step.command, (step.delay || 0) + SEQUENCE_STEP_BUFFER_MS)
-      } else if (step.delay) {
-        addToTerminal(`Waiting ${step.delay / 1000}s...`, 'system')
-        await new Promise(r => setTimeout(r, step.delay))
+  const connect = async (portArg = null) => {
+    const fn = _buildConnect()
+    return fn(portArg)
+  }
+
+  const disconnect = async () => {
+    _reconnect.cancel()
+    _reconnect.uninstallListeners()
+    await reader.stop()
+    if (port.value) {
+      try { await port.value.close() } catch (e) {
+        logger.warn('port.close during disconnect', e?.message, 'serial')
       }
+      port.value = null
+    }
+    isConnected.value = false
+    resetParserState()
+    addToTerminal('Disconnected', 'error')
+  }
+
+  const apStore = useApStore()
+  const executor = createCommandExecutor({
+    isDemoMode,
+    port,
+    onLine,
+    addToTerminal,
+    simulateDemo: _simulateDemoCommand,
+    clearAPs: () => apStore.clearAPs(),
+    clearSelected: () => apStore.clearSelected()
+  })
+
+  const _wrappedConnect = async (portArg = null) => {
+    try {
+      return await _buildConnect(portArg)()
+    } catch (e) {
+      isConnected.value = false
+      addToTerminal(`Connection failed: ${e.message}`, 'error')
+      _reconnect.schedule()
+      throw e
+    }
+  }
+
+  _reconnect = createReconnectManager({
+    isConnected,
+    isDemoMode,
+    autoReconnect,
+    reconnectAttempts,
+    lastConnectedPortInfo,
+    connect: _wrappedConnect,
+    addToTerminal
+  })
+
+  const connectPublic = async (portArg = null) => {
+    try {
+      return await _buildConnect()(portArg)
+    } catch (e) {
+      isConnected.value = false
+      addToTerminal(`Connection failed: ${e.message}`, 'error')
+      _reconnect.schedule()
+      throw e
     }
   }
 
@@ -397,7 +231,7 @@ export const useSerialStore = defineStore('serial', () => {
       addToTerminal('> list -a (demo)', 'command')
       return
     }
-    await sendSequence([
+    await executor.sendSequence([
       { command: 'scanall', delay: 6000 },
       'stopscan',
       { delay: 500 },
@@ -406,7 +240,7 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   const clearListAndScan = async () => {
-    await sendSequence([
+    await executor.sendSequence([
       'clearlist -a',
       { delay: 500 },
     ])
@@ -415,6 +249,7 @@ export const useSerialStore = defineStore('serial', () => {
 
   const clearOutput = () => {
     terminalOutput.value = []
+    triggerRef(terminalOutput)
   }
 
   const toggleDemo = () => {
@@ -423,13 +258,19 @@ export const useSerialStore = defineStore('serial', () => {
 
   const setTerminalOutput = (arr) => {
     terminalOutput.value = arr
+    triggerRef(terminalOutput)
   }
 
   return {
-    port, reader, isConnected, isDemoMode, terminalOutput,
-    rawBuffer, baudRate, autoReconnect, reconnectAttempts,
-    connect, disconnect, sendCommand, sendAndWait, sendSequence, scanAll, clearListAndScan,
+    port, isConnected, isDemoMode, terminalOutput,
+    baudRate, autoReconnect, reconnectAttempts,
+    connect: connectPublic, disconnect,
+    sendCommand: executor.send,
+    sendAndWait: executor.sendAndWait,
+    sendSequence: executor.sendSequence,
+    scanAll, clearListAndScan,
     addToTerminal, clearOutput, toggleDemo, onLine, setTerminalOutput,
-    cancelReconnect: _cancelReconnect, scheduleReconnect: _scheduleReconnect
+    cancelReconnect: () => _reconnect.cancel(),
+    scheduleReconnect: () => _reconnect.schedule()
   }
 })

@@ -1,4 +1,5 @@
 import { putAll, clearStore, getAll, putItem, getItem } from './idb'
+import { recordKey } from './uuid'
 
 const SAVE_DEBOUNCE_MS = 1000
 const SAVE_MAX_WAIT_MS = 5000
@@ -7,6 +8,11 @@ const _timers = new Map()
 const _pending = new Map()
 const _seq = new Map()
 const _firstCall = new Map()
+
+function _stampId(item, getKey) {
+  if (getKey) return getKey(item)
+  return { ...item, id: recordKey(item) }
+}
 
 export function debouncedSave(storeName, items, getKey) {
   const seq = (_seq.get(storeName) || 0) + 1
@@ -27,9 +33,7 @@ export function debouncedSave(storeName, items, getKey) {
     if (!pending) return
     if (pending.seq !== _seq.get(storeName)) return
     try {
-      const itemsWithKey = pending.getKey
-        ? pending.items
-        : pending.items.map(item => ({ ...item, id: item.bssid || item.mac || item.id || JSON.stringify(item) }))
+      const itemsWithKey = pending.items.map(item => _stampId(item, pending.getKey))
       await putAll(storeName, itemsWithKey)
     } catch (e) {
       console.warn(`[persist] save ${storeName} failed:`, e)
@@ -87,9 +91,7 @@ export async function flushPendingSaves() {
     _pending.delete(storeName)
     if (pending && pending.seq === _seq.get(storeName)) {
       try {
-        const itemsWithKey = pending.getKey
-          ? pending.items
-          : pending.items.map(item => ({ ...item, id: item.bssid || item.mac || item.id || JSON.stringify(item) }))
+        const itemsWithKey = pending.items.map(item => _stampId(item, pending.getKey))
         promises.push(putAll(storeName, itemsWithKey))
       } catch (e) {
         console.warn(`[persist] flush ${storeName} failed:`, e)

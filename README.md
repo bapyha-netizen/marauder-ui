@@ -1,6 +1,6 @@
 # Marauder UI — документация
 
-**Версия:** 0.4.3
+**Версия:** 0.5.0
 **Прошивка:** [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko
 **Назначение:** Desktop/web UI для управления ESP32 с прошивкой Marauder через Web Serial API
 
@@ -88,11 +88,17 @@ Marauder UI — графический интерфейс для **ESP32 Maraude
 src/
 ├── stores/
 │   ├── serialStore.js       # Serial-порт, терминал, команды
-│   ├── apStore.js           # Точки доступа + станции
+│   ├── apStore.js           # Точки доступа + станции + maintained indexes
 │   ├── bleStore.js          # BLE-устройства
 │   └── dashboardStore.js    # Статистика, события, парсинг станций
 ├── services/
-│   ├── parserEngine.js      # Парсер вывода Marauder (11 форматов)
+│   ├── parserEngine.js      # Парсер-диспетчер → firmware profile
+│   ├── firmwareProfiles/
+│   │   ├── marauderV1.js    # Парсеры для текущей прошивки
+│   │   └── index.js         # Реестр профилей
+│   ├── serialReader.js      # Read loop, TextDecoder, buffer trimming
+│   ├── commandExecutor.js   # sendCommand, sendAndWait, sendSequence
+│   ├── serialReconnect.js   # Auto-reconnect, device plug/unplug
 │   └── commandRegistry.js   # 66 команд, 9 групп, 18 сценариев
 ├── components/
 │   ├── dashboard/           # DashboardView (Live Output + статистика)
@@ -101,9 +107,18 @@ src/
 │   ├── workflow/            # WorkflowBuilder (сценарии)
 │   └── help/                # HelpGuide (справка с поиском)
 ├── utils/
+│   ├── sanitize.js          # sanitizeText, sanitizeAscii, normalizeMac, safeParseInt
+│   ├── uuid.js              # UUID v4 + recordKey для IndexedDB
+│   ├── logger.js            # Ring-buffer logger с уровнями
+│   ├── metrics.js           # Rolling counters: lines/sec, parser dispatches
+│   ├── persist.js           # Debounced IndexedDB persistence
+│   ├── idb.js               # IndexedDB wrapper
 │   ├── format.js            # signalClass, fmtTime, dotClass
 │   ├── toast.js             # Система toast-уведомлений
+│   ├── oui.js               # OUI vendor lookup
 │   └── demoData.js          # Демо-генератор
+├── composables/
+│   └── useContextAction.js  # Композабл для действий над AP/BLE
 ├── assets/
 │   └── style.css            # Tailwind + компонентные классы
 ├── App.vue                  # Root: tabs + header + status bar + toasts
@@ -403,38 +418,54 @@ taskkill /PID <номер> /F
 
 ---
 
-## Производительность
+## Производительность и архитектура
 
-Версия 0.4.3 содержит комплексные оптимизации для работы с потоковыми данными ESP32 (1000+ строк/сек).
+Версия 0.5.0 содержит комплексные оптимизации и рефакторинг по результатам статического аудита.
 
-### Оптимизации парсера (parserEngine.js)
+### Оптимизации парсера
 
-- **O(1) dispatch по первому символу** — вместо 15 последовательных if-ors используется `_DISPATCH` map с 14 кодпоинтами
-- **O(1) поиск AP по BSSID** — поддерживаемый индекс `_byBssid` (Map<bssid, key>)
-- **O(1) поиск AP по index** — поддерживаемый индекс `_byIndex` (Map<index, key>)
-- Эффект: **10-50x быстрее** парсинг строк (было 300 regex/line → 1-3 regex/line)
+- **O(1) dispatch по первому символу** — `_DISPATCH` map с 14 кодпоинтами
+- **Firmware profiles** — парсер вынесен в `services/firmwareProfiles/marauderV1.js` для поддержки разных версий прошивки
+- **O(1) поиск AP** — maintained indexes `_byBssid` и `_byIndex`
+
+### Рефакторинг serialStore (SRP)
+
+Ранее `serialStore.js` содержал 6+ ответственностей. Теперь:
+
+| Модуль | Ответственность |
+|--------|----------------|
+| `serialStore.js` | Состояние, терминал, public API |
+| `services/serialReader.js` | Read loop, TextDecoder, buffer trimming |
+| `services/commandExecutor.js` | sendCommand, sendAndWait, sendSequence |
+| `services/serialReconnect.js` | Auto-reconnect, device plug/unplug |
+
+### Централизованная санитизация
+
+- `utils/sanitize.js` — `sanitizeText()`, `sanitizeAscii()`, `normalizeMac()`, `safeParseInt()`
+- Все входящие данные проходят через `sanitizeText()` перед отображением
+- Защита от ANSI escape, control characters, non-printable unicode
+
+### Сервисы общего назначения
+
+- `utils/uuid.js` — RFC 4122 v4 UUID + `recordKey()` для IndexedDB (вместо `JSON.stringify`)
+- `utils/logger.js` — Ring-buffer logger с уровнями (debug/info/warn/error)
+- `utils/metrics.js` — Rolling counters: lines/sec, parser dispatches, misses
 
 ### Оптимизации stores
 
-- **Maintained indexes** — `_byBssid` и `_byIndex` обновляются инкрементально при мутациях (не computed)
+- **Maintained indexes** — `_byBssid` и `_byIndex` обновляются инкрементально
 - **shallowRef + triggerRef** — мутации in-place вместо `new Map(...)` копирования
 - **push/shift вместо spread** — O(1) вместо O(N) для FIFO буферов
-- **eventsReversed** — push (O(1)) + loop-based reverse (без spread)
-- **debounced + throttle save** — гарантирует сохранение при visibilitychange
-- **BLE cleanup timer** — очистка старых устройств раз в 30 сек, не на каждый пакет
-- Эффект: **10-100x меньше аллокаций** на каждое обновление
+- **debounced + throttle save** — debounce 1s + max wait 5s
 
 ### Оптимизации UI
 
-- **Windowed terminal rendering** — рендерится только ~40 видимых строк из 2000 (viewport-based)
-- **requestAnimationFrame** — группирует scroll updates
-- **v-text вместо v-html** — убран XSS risk, нативное экранирование Vue
-- Эффект: **~50x меньше DOM work** при 2000 строках в терминале
+- **Windowed terminal rendering** — рендерится только ~40 видимых строк из 2000
+- **v-text вместо v-html** — нативное экранирование Vue
 
 ### Batch processing
 
-- **queueMicrotask** — `_notifyLine` батчит строки в один microtask, не блокчит serial read loop
-- **Hydrate race fix** — snapshot existing data до `await loadStore()`, merge только отсутствующих ключей после
+- **queueMicrotask** — батчит строки в один microtask, не блокирует serial read loop
 
 ### Метрики
 
@@ -443,8 +474,9 @@ taskkill /PID <номер> /F
 | Parser throughput | 1x | 10-50x |
 | Store update alloc | O(N) copy | O(1) mutation |
 | Terminal render | 2000 nodes | ~40 visible |
-| GC pressure | ~8 MB/sec | ~0.1 MB/sec |
-| Hydrate race | data loss | safe merge |
+| SerialStore responsibilities | 6+ | 4 modules |
+| IDB key generation | JSON.stringify | UUID/recordKey |
+| Data sanitization | ad-hoc | centralized |
 
 ---
 
@@ -460,4 +492,4 @@ taskkill /PID <номер> /F
 
 ---
 
-*Документация обновлена 2 июня 2026*
+*Документация обновлена 3 июня 2026*
