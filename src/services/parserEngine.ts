@@ -1,22 +1,16 @@
-/**
- * Parser dispatcher.
- *
- * Routes incoming serial lines to the active firmware profile's
- * parser functions.
- */
-
 import { useApStore } from '../stores/apStore'
 import { useBleStore } from '../stores/bleStore'
 import { useDashboardStore } from '../stores/dashboardStore'
-import { DISPATCH, FALLBACK_PARSERS, resetState as profileReset } from './firmwareProfiles/marauderV1.js'
+import { DISPATCH, FALLBACK_PARSERS, resetState as profileReset } from './firmwareProfiles/marauderV1'
+import type { ParserContext } from '../types/parser'
 import { metrics } from '../utils/metrics'
 
 const CLEANUP_INTERVAL = 30000
 const AP_MAX_AGE = 300000
 
-let intervalId = null
+let intervalId: ReturnType<typeof setInterval> | null = null
 
-export function startParser() {
+export function startParser(): void {
   if (intervalId) return
   intervalId = setInterval(() => {
     try {
@@ -25,25 +19,25 @@ export function startParser() {
   }, CLEANUP_INTERVAL)
 }
 
-export function stopParser() {
+export function stopParser(): void {
   if (intervalId) {
     clearInterval(intervalId)
     intervalId = null
   }
 }
 
-export function resetParserState() {
+export function resetParserState(): void {
   profileReset()
 }
 
-export function parseLine(line) {
+export function parseLine(line: string): void {
   if (!line || !line.trim()) return
   const trimmed = line.trim()
   if (trimmed.startsWith('> ')) return
 
   metrics.inc('parserDispatched', 1)
 
-  const ctx = {
+  const ctx: ParserContext = {
     apStore: useApStore(),
     bleStore: useBleStore(),
     dashStore: useDashboardStore()
@@ -62,7 +56,7 @@ export function parseLine(line) {
   metrics.inc('parserMisses', 1)
 }
 
-export function parseDemoAP() {
+export function parseDemoAP(): void {
   const store = useApStore()
   const PREFIXES = ['Home-', 'WiFi-', 'Network-', 'Guest-', 'Office-', 'IoT-']
   for (let i = 0; i < 10 + Math.floor(Math.random() * 15); i++) {
@@ -84,7 +78,7 @@ export function parseDemoAP() {
   }
 }
 
-export function parseDemoBLE() {
+export function parseDemoBLE(): void {
   const store = useBleStore()
   const names = ['iPhone', 'AirPods', 'Apple Watch', 'Samsung Galaxy', 'Fitbit', 'AirTag']
   for (let i = 0; i < 5 + Math.floor(Math.random() * 8); i++) {
@@ -102,7 +96,7 @@ export function parseDemoBLE() {
   }
 }
 
-export function parseDemoPacketCounts() {
+export function parseDemoPacketCounts(): void {
   useDashboardStore().setPacketCounts({
     beacon: Math.floor(Math.random() * 500) + 100,
     probe: Math.floor(Math.random() * 200) + 50,
@@ -113,9 +107,9 @@ export function parseDemoPacketCounts() {
   })
 }
 
-export function parseDemoChannelUtil() {
+export function parseDemoChannelUtil(): void {
   const store = useDashboardStore()
-  const util = {}
+  const util: Record<number, number> = {}
   for (let ch = 1; ch <= 13; ch++) {
     util[ch] = Math.floor(Math.random() * 200)
   }

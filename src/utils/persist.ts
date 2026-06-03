@@ -4,22 +4,29 @@ import { recordKey } from './uuid'
 const SAVE_DEBOUNCE_MS = 1000
 const SAVE_MAX_WAIT_MS = 5000
 
-const _timers = new Map()
-const _pending = new Map()
-const _seq = new Map()
-const _firstCall = new Map()
+const _timers = new Map<string, ReturnType<typeof setTimeout>>()
+const _pending = new Map<string, { items: Record<string, unknown>[]; getKey: ((item: Record<string, unknown>) => string) | null; seq: number }>()
+const _seq = new Map<string, number>()
+const _firstCall = new Map<string, number>()
 
-function _stampId(item, getKey) {
-  if (getKey) return getKey(item)
+function _stampId(item: Record<string, unknown>, getKey: ((item: Record<string, unknown>) => string) | null): Record<string, unknown> {
+  if (getKey) {
+    const id = getKey(item)
+    return { ...item, id }
+  }
   return { ...item, id: recordKey(item) }
 }
 
-export function debouncedSave(storeName, items, getKey) {
+export function debouncedSave(
+  storeName: string,
+  items: Record<string, unknown>[],
+  getKey?: ((item: Record<string, unknown>) => string) | null
+): void {
   const seq = (_seq.get(storeName) || 0) + 1
   _seq.set(storeName, seq)
-  _pending.set(storeName, { items, getKey, seq })
+  _pending.set(storeName, { items, getKey: getKey ?? null, seq })
   if (_timers.has(storeName)) {
-    clearTimeout(_timers.get(storeName))
+    clearTimeout(_timers.get(storeName)!)
   } else {
     _firstCall.set(storeName, Date.now())
   }
@@ -41,7 +48,7 @@ export function debouncedSave(storeName, items, getKey) {
   }, delay))
 }
 
-export async function loadStore(storeName) {
+export async function loadStore(storeName: string): Promise<Record<string, unknown>[]> {
   try {
     return await getAll(storeName)
   } catch (e) {
@@ -50,7 +57,7 @@ export async function loadStore(storeName) {
   }
 }
 
-export async function clearPersistedStore(storeName) {
+export async function clearPersistedStore(storeName: string): Promise<void> {
   try {
     await clearStore(storeName)
   } catch (e) {
@@ -58,7 +65,7 @@ export async function clearPersistedStore(storeName) {
   }
 }
 
-export async function savePref(key, value) {
+export async function savePref(key: string, value: unknown): Promise<void> {
   try {
     await putItem('preferences', { id: key, value, updatedAt: new Date() })
   } catch (e) {
@@ -66,7 +73,7 @@ export async function savePref(key, value) {
   }
 }
 
-export async function loadPref(key) {
+export async function loadPref(key: string): Promise<unknown> {
   try {
     const item = await getItem('preferences', key)
     return item ? item.value : null
@@ -76,15 +83,15 @@ export async function loadPref(key) {
   }
 }
 
-export function cancelPendingSaves() {
+export function cancelPendingSaves(): void {
   for (const t of _timers.values()) clearTimeout(t)
   _timers.clear()
   _pending.clear()
   _firstCall.clear()
 }
 
-export async function flushPendingSaves() {
-  const promises = []
+export async function flushPendingSaves(): Promise<void> {
+  const promises: Promise<void>[] = []
   for (const [storeName, timer] of _timers.entries()) {
     clearTimeout(timer)
     const pending = _pending.get(storeName)

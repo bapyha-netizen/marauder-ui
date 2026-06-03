@@ -1,6 +1,6 @@
 # Marauder UI — документация
 
-**Версия:** 0.5.0
+**Версия:** 0.5.1
 **Прошивка:** [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko
 **Назначение:** Desktop/web UI для управления ESP32 с прошивкой Marauder через Web Serial API
 

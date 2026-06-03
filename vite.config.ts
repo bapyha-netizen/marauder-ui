@@ -2,12 +2,14 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
-import path from 'path'
+import checker from 'vite-plugin-checker'
+import { resolve } from 'path'
 
 export default defineConfig({
-  base: "/marauder-ui/",
+  base: '/marauder-ui/',
   plugins: [
     vue(),
+    checker({ typescript: true }),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icon.svg'],
@@ -41,7 +43,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': resolve(__dirname, './src'),
     },
   },
   server: {

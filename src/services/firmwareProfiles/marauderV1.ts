@@ -1,16 +1,10 @@
-/**
- * Marauder firmware profile "v1" — current upstream output format.
- *
- * Every parser function receives `(line, ctx)` where
- * ctx = { apStore, bleStore, dashStore }.
- */
-
 import { lookupVendor } from '../../utils/oui'
+import type { ParserContext, FirmwareProfile, ParserFn } from '../../types/parser'
 import { useProbeStore } from '../../stores/probeStore'
 
-function safeInt(value, fallback = null) {
+function safeInt(value: unknown, fallback: number | null = null): number | null {
   if (value === null || value === undefined) return fallback
-  const n = parseInt(value, 10)
+  const n = parseInt(String(value), 10)
   return Number.isNaN(n) ? fallback : n
 }
 
@@ -26,16 +20,16 @@ const BLE_SNIFF_MAC_RE = new RegExp(`^(-?\\d+)\\s+${MAC_RE.source}\\s*$`)
 
 let _bleKeyCounter = 0
 let _infoAPIndex = -1
-let _ipListBuffer = []
+let _ipListBuffer: { index: number; ip: string; mac: string }[] = []
 
-function parseAPBeacon(line, ctx) {
+function parseAPBeacon(line: string, ctx: ParserContext): boolean {
   const m = line.match(AP_BEACON_RE)
   if (!m) return false
   const [, rssi, ch, bssid, essidRaw] = m
   const essid = essidRaw.replace(/[^\x20-\x7E]/g, '').trim() || '(hidden)'
   ctx.apStore.updateOrAddAP({
     rssi: safeInt(rssi),
-    channel: safeInt(ch),
+    channel: safeInt(ch) ?? 0,
     bssid: bssid.toUpperCase(),
     essid,
     isHidden: essid === '(hidden)' || essid === bssid.toUpperCase(),
@@ -46,68 +40,68 @@ function parseAPBeacon(line, ctx) {
   return true
 }
 
-function parseAPList(line, ctx) {
+function parseAPList(line: string, ctx: ParserContext): boolean {
   const re = /\[(\d+)\]\[CH:(\d+)\]\s+(.+)/
   const m = line.match(re)
   if (!m) return false
   const [, index, ch, rest] = m
   const isSelected = rest.includes('(selected)')
   let essid = rest.replace(/\(selected\)/g, '').trim()
-  let rssi = null
+  let rssi: number | null = null
   const rssiMatch = essid.match(/(-?\d+)$/)
   if (rssiMatch) {
     rssi = safeInt(rssiMatch[1])
     essid = essid.replace(/\s*-?\d+$/, '').trim()
   }
-  const apData = {
+  const apData: Record<string, unknown> = {
     index: safeInt(index),
-    channel: safeInt(ch),
+    channel: safeInt(ch) ?? 0,
     essid: essid || '(hidden)',
     rssi,
     lastSeen: new Date()
   }
   if (isSelected) apData.isSelected = true
-  ctx.apStore.updateOrAddAP(apData)
+  ctx.apStore.updateOrAddAP(apData as any)
   ctx.dashStore.addEvent('list', line)
   return true
 }
 
-function parseStationDetect(line, ctx) {
+function parseStationDetect(line: string, ctx: ParserContext): boolean {
   const m = line.match(STATION_DETECT_RE)
   if (!m) return false
   const [, id, firstType, firstMac, , secondType, secondMac] = m
-  const apMac = firstType === 'ap' ? firstMac.toUpperCase() : secondMac.toUpperCase()
-  const staMac = firstType === 'sta' ? firstMac.toUpperCase() : secondMac.toUpperCase()
+  const apMac = (firstType === 'ap' ? firstMac : secondMac).toUpperCase()
+  const staMac = (firstType === 'sta' ? firstMac : secondMac).toUpperCase()
   const found = ctx.apStore.findAPByBSSID(apMac)
   if (found) {
-    ctx.apStore.addStation(found.key, { id: safeInt(id), mac: staMac })
+    ctx.apStore.addStation(found.key, { id: safeInt(id) ?? 0, mac: staMac })
   } else {
     ctx.apStore.updateOrAddAP({
       essid: '(unknown)', bssid: apMac, channel: 0, rssi: null,
       vendor: lookupVendor(apMac), lastSeen: new Date()
     })
-    ctx.apStore.addStation(apMac, { id: safeInt(id), mac: staMac })
+    ctx.apStore.addStation(apMac, { id: safeInt(id) ?? 0, mac: staMac })
   }
   return true
 }
 
-function parseStationList(line, ctx) {
+function parseStationList(line: string, ctx: ParserContext): boolean {
   const apRe = /^\[(\d+)\]\s+(.+)\s+(-?\d+):\s*$/
   const apM = line.match(apRe)
   if (apM) {
-    const [, index, essid, rssi] = apM
-    ctx.dashStore.setLastStationAP(safeInt(index), essid.trim())
+    const [, index, essid] = apM
+    ctx.dashStore.setLastStationAP(safeInt(index) ?? 0, essid.trim())
     return true
   }
   const staM = line.match(STATION_LIST_STA_RE)
   if (staM) {
     const [, staIndex, staMac] = staM
     const apIndex = ctx.dashStore.lastStationAPIndex
-    if (apIndex !== undefined) {
+    if (apIndex !== undefined && apIndex !== null) {
       const found = ctx.apStore.findAPByIndex(apIndex)
       if (found) {
         ctx.apStore.addStation(found.key, {
-          id: safeInt(staIndex),
+          id: safeInt(staIndex) ?? 0,
           mac: staMac.toUpperCase(),
           isSelected: line.includes('(selected)')
         })
@@ -119,7 +113,7 @@ function parseStationList(line, ctx) {
   return false
 }
 
-function parseDeauthSniff(line, ctx) {
+function parseDeauthSniff(line: string, ctx: ParserContext): boolean {
   const m = line.match(DEAUTH_SNIFF_RE)
   if (!m) return false
   const [, rssi, ch, srcMac, , dstMac] = m
@@ -128,17 +122,18 @@ function parseDeauthSniff(line, ctx) {
   return true
 }
 
-function parseProbeSniff(line, ctx) {
+function parseProbeSniff(line: string, ctx: ParserContext): boolean {
   const m = line.match(PROBE_SNIFF_RE)
   if (!m) return false
   const [, rssi, ch, clientMac, , ssid] = m
-  ctx.dashStore.addEvent('probe', `Probe: ${clientMac} -> ${ssid.trim()} Ch:${ch} RSSI:${rssi}`)
+  const trimmedSsid = ssid.trim()
+  ctx.dashStore.addEvent('probe', `Probe: ${clientMac} -> ${trimmedSsid} Ch:${ch} RSSI:${rssi}`)
   ctx.dashStore.incrementPackets()
-  useProbeStore().addProbe(safeInt(rssi), safeInt(ch), clientMac, ssid.trim())
+  useProbeStore().addProbe(safeInt(rssi) ?? 0, safeInt(ch) ?? 0, clientMac, trimmedSsid)
   return true
 }
 
-function parsePMKID(line, ctx) {
+function parsePMKID(line: string, ctx: ParserContext): boolean {
   if (line.includes('Received EAPOL')) {
     const m = line.match(PMKID_CAPTURE_RE)
     if (m) {
@@ -148,24 +143,24 @@ function parsePMKID(line, ctx) {
     }
   }
   const pmkidCapturedRe = /^PMKID captured:\s*([0-9A-Fa-f:]{17})/
-  const pmkidCapturedM = line.match(pmkidCapturedRe)
-  if (pmkidCapturedM) {
-    ctx.dashStore.addEvent('pmkid', `PMKID captured: ${pmkidCapturedM[1].toUpperCase()}`)
+  const cm = line.match(pmkidCapturedRe)
+  if (cm) {
+    ctx.dashStore.addEvent('pmkid', `PMKID captured: ${cm[1].toUpperCase()}`)
     ctx.dashStore.incrementPackets()
     return true
   }
   return false
 }
 
-function parseBLESniff(line, ctx) {
+function parseBLESniff(line: string, ctx: ParserContext): boolean {
   const re = /^(-?\d+)\s+Device:\s+(.+)/
-  const m = line.match(re)
-  if (m) {
-    const [, rssi, name] = m
+  const m1 = line.match(re)
+  if (m1) {
+    const [, rssi, name] = m1
     const isMac = MAC_RE.test(name)
     ctx.bleStore.updateOrAddDevice({
       mac: isMac ? name.toUpperCase() : `BLE:${rssi}-${++_bleKeyCounter}`,
-      rssi: safeInt(rssi),
+      rssi: safeInt(rssi) ?? 0,
       name: isMac ? `BLE Device ${name}` : name.trim(),
       lastSeen: new Date()
     })
@@ -177,8 +172,8 @@ function parseBLESniff(line, ctx) {
     const [, rssi, mac] = m2
     ctx.bleStore.updateOrAddDevice({
       mac: mac.toUpperCase(),
-      rssi: safeInt(rssi),
-      name: `BLE ${mac}`,
+      rssi: safeInt(rssi) ?? 0,
+      name: `BLE ${mac.toUpperCase()}`,
       lastSeen: new Date()
     })
     ctx.dashStore.addEvent('ble', line)
@@ -187,14 +182,14 @@ function parseBLESniff(line, ctx) {
   return false
 }
 
-function parseBLEMeta(line, ctx) {
+function parseBLEMeta(line: string, ctx: ParserContext): boolean {
   const re = /^Meta Device:\s*(-?\d+)\s+(.+)/
   const m = line.match(re)
   if (!m) return false
   const [, rssi, name] = m
   ctx.bleStore.updateOrAddDevice({
     mac: `META:${rssi}`,
-    rssi: safeInt(rssi),
+    rssi: safeInt(rssi) ?? 0,
     name: `Meta: ${name.trim()}`,
     isAirtag: false,
     manufacturer: 'Meta/Ray-Ban',
@@ -204,12 +199,12 @@ function parseBLEMeta(line, ctx) {
   return true
 }
 
-function parseSignalMonitor(line, ctx) {
+function parseSignalMonitor(line: string, ctx: ParserContext): boolean {
   const re = /^(.+?)\s+RSSI:\s*(-?\d+)/
   const m = line.match(re)
   if (!m) return false
   const [, essid, rssi] = m
-  for (const [key, ap] of ctx.apStore.accessPoints) {
+  for (const [, ap] of ctx.apStore.accessPoints) {
     if (ap.essid === essid.trim()) {
       ctx.apStore.updateOrAddAP({
         ...ap,
@@ -223,7 +218,7 @@ function parseSignalMonitor(line, ctx) {
   return false
 }
 
-function parsePacketCount(line, ctx) {
+function parsePacketCount(line: string, ctx: ParserContext): boolean {
   if (line.startsWith('Packet Statistics') || /^-{3,}$/.test(line)) {
     ctx.dashStore.setPacketCounts({ beacon: 0, probe: 0, deauth: 0, eapol: 0, data: 0, management: 0 })
     return true
@@ -232,15 +227,15 @@ function parsePacketCount(line, ctx) {
   const m = line.match(re)
   if (!m) return false
   const [, type, count] = m
-  const key = type.toLowerCase()
+  const key = type.toLowerCase() as keyof import('../../types').PacketCounts
   if (['beacon', 'probe', 'deauth', 'eapol', 'data', 'management'].includes(key)) {
-    ctx.dashStore.setPacketCounts({ [key]: safeInt(count, 0) })
+    ctx.dashStore.setPacketCounts({ [key]: safeInt(count, 0) } as any)
     return true
   }
   return false
 }
 
-function parseChannelAnalyzer(line, ctx) {
+function parseChannelAnalyzer(line: string, ctx: ParserContext): boolean {
   if (line.startsWith('Channel Analyzer') || /^-{3,}$/.test(line)) {
     ctx.dashStore.setChannelUtilization({})
     return true
@@ -249,15 +244,15 @@ function parseChannelAnalyzer(line, ctx) {
   const m = line.match(re)
   if (!m) return false
   const [, ch, count] = m
-  ctx.dashStore.setChannelUtilization({ [safeInt(ch, 0)]: safeInt(count, 0) })
+  ctx.dashStore.setChannelUtilization({ [safeInt(ch, 0) ?? 0]: safeInt(count, 0) ?? 0 })
   return true
 }
 
-function parseAPInfo(line, ctx) {
+function parseAPInfo(line: string, ctx: ParserContext): boolean {
   const idxRe = /^Index:\s*(\d+)/
   const idxM = line.match(idxRe)
   if (idxM) {
-    _infoAPIndex = safeInt(idxM[1], -1)
+    _infoAPIndex = safeInt(idxM[1], -1) ?? -1
     return true
   }
   if (_infoAPIndex < 0) return false
@@ -276,7 +271,7 @@ function parseAPInfo(line, ctx) {
 
   const chanRe = /^Channel:\s*(\d+)/
   const chanM = line.match(chanRe)
-  if (chanM) { ctx.apStore.updateAP(_infoAPIndex, { channel: safeInt(chanM[1]) }); return true }
+  if (chanM) { ctx.apStore.updateAP(_infoAPIndex, { channel: safeInt(chanM[1]) ?? 0 }); return true }
 
   const rssiRe = /^RSSI:\s*(-?\d+)/
   const rssiM = line.match(rssiRe)
@@ -300,7 +295,7 @@ function parseAPInfo(line, ctx) {
   return false
 }
 
-function parseIPList(line, ctx) {
+function parseIPList(line: string, ctx: ParserContext): boolean {
   if (/^IP List/i.test(line) || /^─{3,}$/.test(line)) {
     _ipListBuffer = []
     return true
@@ -311,7 +306,7 @@ function parseIPList(line, ctx) {
   const [, idx, ip] = m
   const macMatch = line.match(MAC_RE)
   _ipListBuffer.push({
-    index: safeInt(idx),
+    index: safeInt(idx) ?? 0,
     ip,
     mac: macMatch ? macMatch[1].toUpperCase() : ''
   })
@@ -319,7 +314,7 @@ function parseIPList(line, ctx) {
   return true
 }
 
-function parseSystemMsg(line, ctx) {
+function parseSystemMsg(line: string, ctx: ParserContext): boolean {
   if (/^\[(INFO|WARN|ERROR|SYSTEM|APP)\]/.test(line)) {
     ctx.dashStore.addEvent('system', line)
     return true
@@ -335,7 +330,7 @@ function parseSystemMsg(line, ctx) {
   return false
 }
 
-export const DISPATCH = {
+export const DISPATCH: Record<number, ParserFn[]> = {
   45: [parseAPBeacon, parseDeauthSniff, parseProbeSniff, parseBLESniff],
   91: [parseAPList, parseStationList, parseIPList, parseSystemMsg],
   82: [parsePMKID, parseAPInfo, parseSystemMsg],
@@ -355,7 +350,7 @@ export const DISPATCH = {
   109: [parsePacketCount, parseSystemMsg]
 }
 
-export const FALLBACK_PARSERS = [
+export const FALLBACK_PARSERS: ParserFn[] = [
   parseStationDetect,
   parseSignalMonitor,
   parseSystemMsg
@@ -366,7 +361,7 @@ export const META = {
   description: 'Current upstream Marauder output grammar (v1.x firmware)'
 }
 
-export function resetState() {
+export function resetState(): void {
   _bleKeyCounter = 0
   _infoAPIndex = -1
   _ipListBuffer = []

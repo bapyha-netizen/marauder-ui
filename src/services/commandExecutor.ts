@@ -1,16 +1,3 @@
-/**
- * Command executor for the Web Serial layer.
- *
- * Owns:
- *   - writing a single command to the port
- *   - sending a command and waiting for a prompt (sendAndWait)
- *   - sending a multi-step sequence with per-step delays
- *   - demo-mode command simulation
- *
- * The store delegates command dispatch here; the store only holds
- * state.
- */
-
 import { sanitizeText } from '../utils/sanitize'
 
 const DEFAULT_CMD_TIMEOUT_MS = 15000
@@ -18,60 +5,66 @@ const SEQUENCE_STEP_TIMEOUT_MS = 5000
 const SEQUENCE_STEP_BUFFER_MS = 5000
 const PROMPT_RE = /^>\s*$|^esp32marauder>\s*$/i
 
-export function createCommandExecutor({
-  isDemoMode,
-  port,
-  onLine,
-  addToTerminal,
-  simulateDemo,
-  clearAPs,
-  clearSelected
-}) {
-  const _send = async (command) => {
+interface PortRef {
+  value: { writable: WritableStream<Uint8Array> | null } | null
+}
+
+interface ExecutorDeps {
+  isDemoMode: { value: boolean }
+  port: PortRef
+  onLine: (handler: (line: string) => void) => () => void
+  addToTerminal: (text: string, type?: string) => void
+  simulateDemo?: (command: string) => void
+  clearAPs?: () => void
+  clearSelected?: () => void
+}
+
+export function createCommandExecutor(deps: ExecutorDeps) {
+  const _send = async (command: string): Promise<boolean> => {
     if (!command) return false
     const cmd = sanitizeText(command, { maxLength: 512 })
     if (!cmd) return false
-    if (cmd === 'clearlist -a') clearAPs?.()
-    else if (cmd === 'clearlist -c') clearSelected?.()
+    if (cmd === 'clearlist -a') deps.clearAPs?.()
+    else if (cmd === 'clearlist -c') deps.clearSelected?.()
 
-    if (isDemoMode.value) {
-      addToTerminal(`> ${cmd}`, 'command')
-      simulateDemo?.(cmd)
+    if (deps.isDemoMode.value) {
+      deps.addToTerminal(`> ${cmd}`, 'command')
+      deps.simulateDemo?.(cmd)
       return true
     }
-    if (!port.value) {
-      addToTerminal('Not connected', 'error')
+    if (!deps.port.value) {
+      deps.addToTerminal('Not connected', 'error')
       return false
     }
     try {
-      if (!port.value.writable) {
-        addToTerminal('Port is not writable', 'error')
+      if (!deps.port.value.writable) {
+        deps.addToTerminal('Port is not writable', 'error')
         return false
       }
-      const writer = port.value.writable.getWriter()
+      const writer = deps.port.value.writable.getWriter()
       try {
         await writer.write(new TextEncoder().encode(cmd + '\n'))
-        addToTerminal(`> ${cmd}`, 'command')
+        deps.addToTerminal(`> ${cmd}`, 'command')
         return true
       } finally {
         writer.releaseLock()
       }
     } catch (e) {
-      addToTerminal(`Failed: ${e.message}`, 'error')
+      deps.addToTerminal(`Failed: ${(e as Error).message}`, 'error')
       return false
     }
   }
 
-  const sendAndWait = (command, timeout = DEFAULT_CMD_TIMEOUT_MS) => {
+  const sendAndWait = (command: string, timeout: number = DEFAULT_CMD_TIMEOUT_MS): Promise<void> => {
     return new Promise((resolve) => {
-      if (isDemoMode.value || !port.value) {
+      if (deps.isDemoMode.value || !deps.port.value) {
         _send(command)
         setTimeout(resolve, Math.min(timeout, 500))
         return
       }
       const echo = `> ${command}`
       let resolved = false
-      const unsub = onLine((line) => {
+      const unsub = deps.onLine((line: string) => {
         if (!resolved && line !== echo && PROMPT_RE.test(line)) {
           resolved = true
           unsub()
@@ -83,7 +76,7 @@ export function createCommandExecutor({
         if (!resolved) {
           resolved = true
           unsub()
-          addToTerminal(`Timed out waiting for prompt after: ${command}`, 'warning')
+          deps.addToTerminal(`Timed out waiting for prompt after: ${command}`, 'warning')
           resolve()
         }
       }, timeout)
@@ -98,14 +91,14 @@ export function createCommandExecutor({
     })
   }
 
-  const sendSequence = async (steps) => {
+  const sendSequence = async (steps: (string | { command?: string; delay?: number })[]): Promise<void> => {
     for (const step of steps) {
       if (typeof step === 'string') {
         await sendAndWait(step, SEQUENCE_STEP_TIMEOUT_MS)
       } else if (step.command) {
         await sendAndWait(step.command, (step.delay || 0) + SEQUENCE_STEP_BUFFER_MS)
       } else if (step.delay) {
-        addToTerminal(`Waiting ${step.delay / 1000}s...`, 'system')
+        deps.addToTerminal(`Waiting ${step.delay / 1000}s...`, 'system')
         await new Promise(r => setTimeout(r, step.delay))
       }
     }
@@ -113,3 +106,5 @@ export function createCommandExecutor({
 
   return { send: _send, sendAndWait, sendSequence }
 }
+
+export type CommandExecutor = ReturnType<typeof createCommandExecutor>

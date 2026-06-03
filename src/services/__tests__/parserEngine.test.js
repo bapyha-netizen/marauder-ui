@@ -15,7 +15,7 @@ import { useApStore } from '../../stores/apStore'
 import { useBleStore } from '../../stores/bleStore'
 import { useDashboardStore } from '../../stores/dashboardStore'
 import { useProbeStore } from '../../stores/probeStore'
-import { parseLine, parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil, startParser, stopParser } from '../parserEngine.js'
+import { parseLine, parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil, startParser, stopParser } from '../parserEngine.ts'
 
 describe('parseLine — ESP32 Marauder output parser', () => {
   let apStore, bleStore, dashStore, probeStore
@@ -500,14 +500,14 @@ describe('parseLine — ESP32 Marauder output parser', () => {
 
   describe('resetParserState', () => {
     it('resets parser globals on disconnect', async () => {
-      const { resetParserState, parseLine } = await import('../parserEngine.js')
+      const { resetParserState, parseLine } = await import('../parserEngine.ts')
       parseLine('Index: 5')
       parseLine('BSSID: AA:BB:CC:11:22:33')
       expect(() => resetParserState()).not.toThrow()
     })
 
     it('resets BLE key counter', async () => {
-      const { resetParserState } = await import('../parserEngine.js')
+      const { resetParserState } = await import('../parserEngine.ts')
       expect(() => resetParserState()).not.toThrow()
     })
   })

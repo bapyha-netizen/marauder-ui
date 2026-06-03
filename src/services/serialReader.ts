@@ -1,36 +1,26 @@
-/**
- * Read loop for the Web Serial layer.
- *
- * Owns:
- *   - TextDecoder lifecycle
- *   - raw buffer accumulation and trimming
- *   - line splitting and dispatch to a sink
- *   - clean cancellation on disconnect
- *
- * The reader exposes a single `start(port, sink)` method and tracks
- * its own active flag so the store can stop it without knowing the
- * internals.
- */
-
 import { metrics } from '../utils/metrics'
 
 const RAW_BUFFER_MAX = 65536
 const RAW_BUFFER_TRIM_TO = 32768
 
+interface SerialReaderPort {
+  readable: ReadableStream<Uint8Array> | null
+}
+
 export function createSerialReader() {
-  let _reader = null
+  let _reader: ReadableStreamDefaultReader<Uint8Array> | null = null
   let _active = false
-  let _listenPromise = null
+  let _listenPromise: Promise<void> | null = null
 
-  const isActive = () => _active
+  const isActive = (): boolean => _active
 
-  const start = (port, sink) => {
+  const start = (port: SerialReaderPort, sink: (line: string) => void): Promise<void> => {
     if (!port || !port.readable) return Promise.resolve()
     _active = true
     const txtDecoder = new TextDecoder()
     let buffer = ''
     _listenPromise = (async () => {
-      _reader = port.readable.getReader()
+      _reader = port.readable!.getReader()
       try {
         while (_active) {
           const { value, done } = await _reader.read()
@@ -54,7 +44,7 @@ export function createSerialReader() {
           }
         }
       } finally {
-        try { _reader?.releaseLock?.() } catch (_) { /* ignore */ }
+        try { _reader?.releaseLock() } catch (_) { /* ignore */ }
         _reader = null
         _active = false
       }
@@ -62,7 +52,7 @@ export function createSerialReader() {
     return _listenPromise
   }
 
-  const stop = async () => {
+  const stop = async (): Promise<void> => {
     _active = false
     if (_reader) {
       try { await _reader.cancel() } catch (_) { /* ignore */ }
@@ -75,3 +65,5 @@ export function createSerialReader() {
 
   return { start, stop, isActive }
 }
+
+export type SerialReader = ReturnType<typeof createSerialReader>
