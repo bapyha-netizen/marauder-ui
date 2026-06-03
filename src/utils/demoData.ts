@@ -1,5 +1,24 @@
 import { escHtml } from './format'
 
+interface Station {
+  id: number
+  mac: string
+  vendor: string
+  lastSeen: Date
+}
+
+interface Ap {
+  index: number
+  bssid: string
+  essid: string
+  rssi: number
+  channel: number
+  isHidden: boolean
+  isSelected: boolean
+  lastSeen: Date
+  stations: Station[]
+}
+
 const VENDORS = ['Cisco', 'TP-Link', 'Netgear', 'D-Link', 'Asus', 'Linksys', 'Ubiquiti']
 const SSID_PREFIXES = ['Home-', 'WiFi-', 'Network-', 'Guest-', 'Office-', 'IoT-']
 
@@ -23,12 +42,12 @@ function generateChannel() {
     return Math.floor(Math.random() * 13) + 1
 }
 
-export function generateDemoData() {
+export function generateDemoData(): Ap[] {
     const apCount = 10 + Math.floor(Math.random() * 10)
-    const aps = []
+    const aps: Ap[] = []
 
     for (let i = 0; i < apCount; i++) {
-        const ap = {
+        const ap: Ap = {
             index: i,
             bssid: generateMAC(),
             essid: generateSSID(),
@@ -56,9 +75,9 @@ export function generateDemoData() {
     return aps
 }
 
-export function generateDemoTerminalOutput() {
+export function generateDemoTerminalOutput(): Array<{ text: string; cls: string }> {
     const aps = generateDemoData()
-    const lines = [
+    const raw: string[] = [
         '<span class="text-blue-400">ESP32 Marauder</span>',
         '<span class="text-blue-400">By: justcallmekoko</span>',
         '<span class="text-cyan-400">> scanall</span>',
@@ -81,9 +100,9 @@ export function generateDemoTerminalOutput() {
         '<span class="text-purple-400">-38 Device: AA:BB:CC:DD:EE:FF</span>'
     ]
 
-    lines.push(...aps.slice(0, 3).map((ap, i) =>
+    raw.push(...aps.slice(0, 3).map((ap, i) =>
         `<span class="text-yellow-400">${i}: ap: ${escHtml(ap.bssid)} -> sta: ${escHtml(generateMAC())}</span>`
     ))
 
-    return lines
+    return raw.map(html => ({ text: html, cls: '' }))
 }

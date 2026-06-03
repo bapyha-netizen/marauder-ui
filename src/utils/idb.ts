@@ -1,10 +1,12 @@
 const DB_NAME = 'marauder-ui'
 const DB_VERSION = 1
-const STORES = ['accessPoints', 'bleDevices', 'probes', 'preferences', 'stats']
+const STORES = ['accessPoints', 'bleDevices', 'probes', 'preferences', 'stats'] as const
 
-let _dbPromise = null
+type StoreName = (typeof STORES)[number]
 
-function openDB() {
+let _dbPromise: Promise<IDBDatabase> | null = null
+
+function openDB(): Promise<IDBDatabase> {
   if (_dbPromise) return _dbPromise
   _dbPromise = new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') {
@@ -13,7 +15,7 @@ function openDB() {
     }
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = (event) => {
-      const db = event.target.result
+      const db = (event.target as IDBOpenDBRequest).result
       for (const name of STORES) {
         if (!db.objectStoreNames.contains(name)) {
           if (name === 'preferences' || name === 'stats') {
@@ -34,7 +36,7 @@ export function _resetDbPromise() {
   _dbPromise = null
 }
 
-export async function putItem(storeName, value) {
+export async function putItem(storeName: string, value: any): Promise<IDBValidKey> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readwrite')
@@ -47,7 +49,7 @@ export async function putItem(storeName, value) {
   })
 }
 
-export async function getItem(storeName, key) {
+export async function getItem(storeName: string, key: IDBValidKey): Promise<any> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readonly')
@@ -58,7 +60,7 @@ export async function getItem(storeName, key) {
   })
 }
 
-export async function getAll(storeName) {
+export async function getAll(storeName: string): Promise<any[]> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readonly')
@@ -69,7 +71,7 @@ export async function getAll(storeName) {
   })
 }
 
-export async function clearStore(storeName) {
+export async function clearStore(storeName: string): Promise<void> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readwrite')
@@ -80,11 +82,11 @@ export async function clearStore(storeName) {
   })
 }
 
-export async function clearAll() {
+export async function clearAll(): Promise<void> {
   await Promise.all(STORES.map(clearStore))
 }
 
-export async function putAll(storeName, items) {
+export async function putAll(storeName: string, items: any[]): Promise<void> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readwrite')

@@ -1,17 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref, shallowRef, triggerRef, computed } from 'vue'
+import type { DashboardEvent, PacketCounts, ChannelUtilization, IPListEntry } from '../types'
 
 export const useDashboardStore = defineStore('dashboard', () => {
   const commandsSent = ref(0)
   const packetsCaptured = ref(0)
   const sessionStart = ref(new Date())
-  const events = shallowRef([])
+  const events = shallowRef<DashboardEvent[]>([])
   const tick = ref(0)
-  const lastStationAPIndex = ref(null)
+  const lastStationAPIndex = ref<number | null>(null)
   const lastStationAPName = ref('')
-  const packetCounts = shallowRef({ beacon: 0, probe: 0, deauth: 0, eapol: 0, data: 0, management: 0 })
-  const channelUtilization = shallowRef({})
-  const ipList = shallowRef([])
+  const packetCounts = shallowRef<PacketCounts>({ beacon: 0, probe: 0, deauth: 0, eapol: 0, data: 0, management: 0 })
+  const channelUtilization = shallowRef<ChannelUtilization>({})
+  const ipList = shallowRef<IPListEntry[]>([])
 
   const sessionDuration = computed(() => {
     void tick.value
@@ -28,7 +29,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     return res
   })
 
-  let tickInterval = null
+  let tickInterval: ReturnType<typeof setInterval> | null = null
 
   function startTick() {
     if (tickInterval) return
@@ -47,17 +48,17 @@ export const useDashboardStore = defineStore('dashboard', () => {
     packetsCaptured.value += n
   }
 
-  function addEvent(type, data) {
+  function addEvent(type: string, data: string) {
     events.value.push({ type, data, time: new Date() })
     if (events.value.length > 200) events.value.shift()
     triggerRef(events)
   }
 
-  function setPacketCounts(counts) {
+  function setPacketCounts(counts: Partial<PacketCounts>) {
     packetCounts.value = { ...packetCounts.value, ...counts }
   }
 
-  function setChannelUtilization(util) {
+  function setChannelUtilization(util: ChannelUtilization) {
     if (util && Object.keys(util).length === 0) {
       channelUtilization.value = {}
     } else {
@@ -65,16 +66,16 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }
   }
 
-  function setStats(stats) {
+  function setStats(stats: { commandsSent?: number; packetsCaptured?: number }) {
     commandsSent.value = stats.commandsSent || 0
     packetsCaptured.value = stats.packetsCaptured || 0
   }
 
-  function setIPList(list) {
+  function setIPList(list: IPListEntry[]) {
     ipList.value = list
   }
 
-  function setLastStationAP(index, name) {
+  function setLastStationAP(index: number, name: string) {
     lastStationAPIndex.value = index
     lastStationAPName.value = name
   }

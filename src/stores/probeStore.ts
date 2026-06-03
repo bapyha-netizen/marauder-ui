@@ -4,8 +4,16 @@ import { debouncedSave, loadStore, clearPersistedStore } from '../utils/persist'
 
 const PERSIST_KEY = 'probes'
 
+interface ProbeRecord {
+  rssi: number
+  ch: number
+  clientMac: string
+  ssid: string
+  time: Date
+}
+
 export const useProbeStore = defineStore('probe', () => {
-  const probes = shallowRef([])
+  const probes = shallowRef<ProbeRecord[]>([])
 
   const probeCount = computed(() => probes.value.length)
 
@@ -21,7 +29,7 @@ export const useProbeStore = defineStore('probe', () => {
     return s.size
   })
 
-  function addProbe(rssi, ch, clientMac, ssid) {
+  function addProbe(rssi: number, ch: number, clientMac: string, ssid: string) {
     probes.value.push({ rssi, ch, clientMac: clientMac.toUpperCase(), ssid, time: new Date() })
     if (probes.value.length > 500) probes.value.shift()
     triggerRef(probes)
@@ -32,9 +40,8 @@ export const useProbeStore = defineStore('probe', () => {
     clearPersistedStore(PERSIST_KEY)
   }
 
-  let _probeCounter = 0
   watch(probes, (arr) => {
-    const items = new Array(arr.length)
+    const items = new Array<Record<string, unknown>>(arr.length)
     for (let i = 0; i < arr.length; i++) {
       const p = arr[i]
       items[i] = {
@@ -52,7 +59,7 @@ export const useProbeStore = defineStore('probe', () => {
   async function hydrate() {
     const saved = await loadStore(PERSIST_KEY)
     if (!saved || saved.length === 0) return
-    const restored = saved.map(p => ({
+    const restored = saved.map((p: any): ProbeRecord => ({
       rssi: p.rssi,
       ch: p.ch,
       clientMac: p.clientMac,
@@ -66,7 +73,7 @@ export const useProbeStore = defineStore('probe', () => {
       const id = `${p.clientMac}-${p.time?.getTime?.()}`
       if (!existingIds.has(id)) merged.push(p)
     }
-    merged.sort((a, b) => a.time - b.time)
+    merged.sort((a, b) => a.time.getTime() - b.time.getTime())
     probes.value = merged.slice(-500)
     triggerRef(probes)
   }

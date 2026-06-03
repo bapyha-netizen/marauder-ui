@@ -1,6 +1,6 @@
 # Marauder UI — документация
 
-**Версия:** 0.5.1
+**Версия:** 0.5.2 (build 2026-06-03)
 **Прошивка:** [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko
 **Назначение:** Desktop/web UI для управления ESP32 с прошивкой Marauder через Web Serial API
 
@@ -15,11 +15,14 @@
 5. [Интерфейс](#интерфейс)
 6. [Команды](#команды)
 7. [Сценарии](#сценарии)
-8. [Парсер данных](#парсер-данных)
-9. [Demo-режим](#demo-режим)
-10. [Советы](#советы)
-11. [Юридическое предупреждение](#юридическое-предупреждение)
+8. [Speaker Hunter](#speaker-hunter)
+9. [Парсер данных](#парсер-данных)
+10. [Demo-режим](#demo-режим)
+11. [Советы](#советы)
 12. [Производительность](#производительность)
+13. [Безопасность](#безопасность)
+14. [Changelog](#changelog)
+15. [Юридическое предупреждение](#юридическое-предупреждение)
 
 ---
 
@@ -30,15 +33,17 @@ Marauder UI — графический интерфейс для **ESP32 Maraude
 ### Возможности
 
 - 📡 **Сканирование WiFi** — `scanall`, `sniffbeacon`, `sniffprobe`, `sniffdeauth`, `sniffpmkid`, `sniffraw`, `sniffsae`, `sigmon`, `mactrack`
-- 🔵 **Bluetooth** — `sniffbt` (AirTag/Flipper/Flock/Meta), `blespam` (6 типов), `sniffskim`, `spoofat`
+- 🔵 **Bluetooth** — `sniffbt` (AirTag/Flipper/Flock/Meta/Speakers), `blespam` (11 типов), `sniffskim`, `spoofat`
+- 🔊 **Атаки на колонки** — Speaker Hunter (поиск + атака), Speaker Kill (агрессивный спам), целевые атаки по брендам (JBL/Bose/Sony/Marshall)
 - ⚡ **Атаки** — deauth, beacon spam (random/list/clone), probe spam, rickroll, badmsg, sleep, sae, csa, quiet, funny
 - 📊 **Дашборд** — Live Output, статистика AP/Stations/BLE/Pkts, топ-10 AP, лента событий
 - 📋 **Таблицы** — AP Explorer (с раскрытием станций, сортировкой, поиском), BLE Explorer (с подсветкой AirTag)
 - 🗺 **Wardraving** — GPS-трекинг с записью в Wigle-формате, отметки POI, NMEA
-- ⚡ **Сценарии** — 18 готовых сценариев (рекон, атаки, BLE, GPS)
+- ⚡ **Сценарии** — 20 готовых сценариев (рекон, атаки, BLE, GPS, колонки)
 - 🔌 **Demo-режим** — работа без ESP32 для ознакомления
 - 🆘 **Emergency Stop** — кнопка немедленной остановки в хедере
 - ⚡ **Производительность** — 10-100x оптимизации для потокового режима (1000 строк/сек)
+- 🔒 **Безопасность** — USB vendor whitelist, beforeunload persistence, memory bounds, ARIA labels
 
 ---
 
@@ -63,66 +68,61 @@ Marauder UI — графический интерфейс для **ESP32 Maraude
 │  └─────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────┘
 ```
-┌──────────────────────────────────────────────────────┐
-│                   Браузер (Chrome/Edge)               │
-│                                                        │
-│  ┌─────────────┐  ┌──────────┐  ┌──────────────────┐  │
-│  │  Vue 3 UI    │  │  Pinia   │  │  Parser Engine    │  │
-│  │  (табы)      │◄─┤  Stores  │◄─┤  (10+ форматов)   │  │
-│  └──────┬───────┘  └──────────┘  └──────────────────┘  │
-│         │                                               │
-│  ┌──────▼───────┐                                      │
-│  │ Web Serial API│                                      │
-│  └──────┬───────┘                                      │
-└─────────┼────────────────────────────────────────────┘
-          │ USB
-┌─────────▼────────────────────────────────────────────┐
-│              ESP32 + Marauder Firmware                 │
-│  WiFi · BLE · GPS · SD · Packet Monitor                │
-└───────────────────────────────────────────────────────┘
-```
 
 ### Структура проекта
 
 ```
 src/
-├── stores/
-│   ├── serialStore.js       # Serial-порт, терминал, команды
-│   ├── apStore.js           # Точки доступа + станции + maintained indexes
-│   ├── bleStore.js          # BLE-устройства
-│   └── dashboardStore.js    # Статистика, события, парсинг станций
-├── services/
-│   ├── parserEngine.js      # Парсер-диспетчер → firmware profile
+├── stores/                      # Pinia stores (TypeScript)
+│   ├── serialStore.ts           # Serial-порт, терминал, команды
+│   ├── apStore.ts               # Точки доступа + станции + maintained indexes
+│   ├── bleStore.ts              # BLE-устройства
+│   ├── dashboardStore.ts        # Статистика, события, парсинг станций
+│   └── probeStore.ts            # Probe-запросы
+├── services/                    # Business logic (TypeScript)
+│   ├── parserEngine.ts          # Парсер-диспетчер → firmware profile
 │   ├── firmwareProfiles/
-│   │   ├── marauderV1.js    # Парсеры для текущей прошивки
-│   │   └── index.js         # Реестр профилей
-│   ├── serialReader.js      # Read loop, TextDecoder, buffer trimming
-│   ├── commandExecutor.js   # sendCommand, sendAndWait, sendSequence
-│   ├── serialReconnect.js   # Auto-reconnect, device plug/unplug
-│   └── commandRegistry.js   # 66 команд, 9 групп, 18 сценариев
+│   │   ├── marauderV1.ts        # Парсеры для текущей прошивки
+│   │   └── index.ts             # Реестр профилей
+│   ├── serialReader.ts          # Read loop, TextDecoder, buffer trimming
+│   ├── commandExecutor.ts       # sendCommand, sendAndWait, sendSequence
+│   ├── serialReconnect.ts       # Auto-reconnect, device plug/unplug
+│   ├── commandRegistry.ts       # 77 команд, 9 групп, 20 сценариев
+│   └── commandMeta.ts           # Метаданные команд (severity, target, needsTarget)
 ├── components/
-│   ├── dashboard/           # DashboardView (Live Output + статистика)
-│   ├── ap/                  # APExplorer (таблица AP/станций)
-│   ├── ble/                 # BLEExplorer (таблица BLE)
-│   ├── workflow/            # WorkflowBuilder (сценарии)
-│   └── help/                # HelpGuide (справка с поиском)
-├── utils/
-│   ├── sanitize.js          # sanitizeText, sanitizeAscii, normalizeMac, safeParseInt
-│   ├── uuid.js              # UUID v4 + recordKey для IndexedDB
-│   ├── logger.js            # Ring-buffer logger с уровнями
-│   ├── metrics.js           # Rolling counters: lines/sec, parser dispatches
-│   ├── persist.js           # Debounced IndexedDB persistence
-│   ├── idb.js               # IndexedDB wrapper
-│   ├── format.js            # signalClass, fmtTime, dotClass
-│   ├── toast.js             # Система toast-уведомлений
-│   ├── oui.js               # OUI vendor lookup
-│   └── demoData.js          # Демо-генератор
+│   ├── dashboard/               # DashboardView (Live Output + статистика + кнопки атак)
+│   ├── ap/                      # APExplorer (таблица AP/станций)
+│   ├── ble/                     # BLEExplorer (таблица BLE)
+│   ├── probes/                  # ProbesView (таблица probe-запросов)
+│   ├── workflow/                # WorkflowBuilder (сценарии)
+│   ├── help/                    # HelpGuide (справка с поиском)
+│   └── ConfirmDialog.vue        # Диалог подтверждения
+├── utils/                       # Утилиты (TypeScript)
+│   ├── sanitize.ts              # sanitizeText, sanitizeAscii, normalizeMac, safeParseInt
+│   ├── uuid.ts                  # UUID v4 + recordKey для IndexedDB
+│   ├── logger.ts                # Ring-buffer logger с уровнями
+│   ├── metrics.ts               # Rolling counters: lines/sec, parser dispatches
+│   ├── persist.ts               # Debounced IndexedDB persistence + beforeunload
+│   ├── idb.ts                   # IndexedDB wrapper
+│   ├── format.ts                # signalClass, fmtTime, dotClass
+│   ├── toast.ts                 # Система toast-уведомлений
+│   ├── oui.ts                   # OUI vendor lookup
+│   ├── demoData.ts              # Демо-генератор
+│   └── wigle.ts                 # Wigle CSV экспорт
 ├── composables/
-│   └── useContextAction.js  # Композабл для действий над AP/BLE
+│   └── useContextAction.ts      # Композабл для действий над AP/BLE
+├── types/                       # TypeScript definitions
+│   ├── index.ts                 # Core types (AccessPoint, BLEDevice, etc.)
+│   ├── parser.ts                # ParserContext, FirmwareProfile
+│   ├── serial.ts                # SerialPortInfo, TerminalLineType
+│   └── command.ts               # CommandDef, Scenario
 ├── assets/
-│   └── style.css            # Tailwind + компонентные классы
-├── App.vue                  # Root: tabs + header + status bar + toasts
-└── main.js                  # Точка входа
+│   └── style.css                # Tailwind + компонентные классы
+├── App.vue                      # Root: tabs + header + status bar + toasts
+├── main.js                      # Точка входа
+├── env.d.ts                     # Web Serial API type declarations
+├── tsconfig.json                # TypeScript config (incremental migration)
+└── vite.config.ts               # Vite + vue-tsc checker
 ```
 
 ---
@@ -153,6 +153,15 @@ npm run dev
 4. В появившемся диалоге выберите порт ESP32 (обычно CP2102 или CH340)
 5. После подключения загорится зелёный индикатор и появится статус-бар
 
+**Поддерживаемые USB-устройства:**
+| Vendor | Чип | USB VID:PID |
+|--------|-----|-------------|
+| Silicon Labs | CP2102 | `10C4:EA60` |
+| WCH | CH340 | `1A86:7523` |
+| FTDI | FT232 | `0403:6001` |
+| WCH | CH343 | `1A86:55D4` |
+| Espressif | ESP32-S2 | `303A:1001` |
+
 **Если не подключается:**
 - Убедитесь, что ESP32 не занят другим приложением (Arduino IDE, PuTTY)
 - Нажмите **RST** на ESP32 и попробуйте снова
@@ -166,10 +175,11 @@ npm run dev
 
 | Вкладка | Содержание |
 |---------|-----------|
-| 📊 **Dashboard** | Live Output (1/3 слева), статистика AP/Stations/BLE/Pkts (2/3 справа), топ-10 AP, лента событий, кнопки Scan All / Scan BLE / Clear List / Clear |
+| 📊 **Dashboard** | Live Output (1/3 слева), статистика AP/Stations/BLE/Pkts (2/3 справа), топ-10 AP, лента событий, кнопки по категориям |
 | 📶 **APs** | Таблица AP с сортировкой по RSSI/ESSID/Channel/Stations, поиск, раскрытие станций по клику, цветовая индикация сигнала |
-| 🔵 **BLE** | Таблица BLE-устройств с подсветкой AirTag, поиск, кнопки Scan/Clear |
-| ⚡ **Scenarios** | Карточки 18 сценариев, запуск с пошаговым выполнением и возможностью отмены |
+| 🔵 **BLE** | Таблица BLE-устройств с автоопределением типа (AirTag/Speaker/BLE), OUI vendor lookup, multi-select для массовых атак, сортировка по Signal/Name/Type/Packets |
+| 🔊 **Probes** | Таблица probe-запросов от клиентов |
+| ⚡ **Scenarios** | Карточки 20 сценариев, запуск с пошаговым выполнением и прогресс-баром |
 | ❓ **Help** | Поиск по всем командам, копирование по клику, секция со сценариями |
 
 ### Status Bar (всегда внизу)
@@ -193,7 +203,7 @@ npm run dev
 |--------|--------|-----|
 | 📡 Сканирование | 11 | scanall, sniffbeacon, sniffprobe, sniffdeauth, sniffpmkid, sniffraw и др. |
 | ⚡ Атаки | 13 | deauth, beacon (random/list/clone/funny), probe, rickroll, badmsg, sleep, sae, csa, quiet |
-| 🔵 Bluetooth | 13 | sniffbt (с фильтрами), blespam (6 типов + all), sniffskim, spoofat |
+| 🔵 Bluetooth | 19 | sniffbt (с фильтрами + колонки), blespam (11 типов), sniffskim, spoofat |
 | 📋 Списки | 6 | list -a/-c/-s/-t/-p/-i |
 | ✅ Выбор | 8 | select, clearlist, фильтры contains/equals |
 | 🏷 SSID | 6 | ssid gen/add/remove, save/load |
@@ -252,6 +262,11 @@ npm run dev
 | `sniffbt -t flipper` | Обнаружение Flipper Zero |
 | `sniffbt -t flock` | Обнаружение Flock Penguin |
 | `sniffbt -t meta` | Обнаружение Meta/Ray-Ban |
+| `sniffbt -t speaker` | Поиск Bluetooth-колонок |
+| `sniffbt -t jbl` | Обнаружение JBL колонок |
+| `sniffbt -t bose` | Обнаружение Bose колонок |
+| `sniffbt -t sony` | Обнаружение Sony колонок |
+| `sniffbt -t marshall` | Обнаружение Marshall колонок |
 | `sniffskim` | Поиск BLE-скиммеров (HC-03/05/06) |
 | `blespam -t all` | Все типы BLE-спама сразу |
 | `blespam -t sourapple` | BLE-спам Apple (Sour Apple) |
@@ -259,7 +274,11 @@ npm run dev
 | `blespam -t google` | Google Fast Pair спам |
 | `blespam -t samsung` | Samsung Galaxy Watch спам |
 | `blespam -t windows` | Microsoft Swift Pair спам |
-| `blespam -t flipper` | Flipper Zero BLE-спам |
+| `blespam -t speaker` | Спам на Bluetooth-колонки (общий) |
+| `blespam -t jbl` | Спам на JBL колонки |
+| `blespam -t bose` | Спам на Bose колонки |
+| `blespam -t sony` | Спам на Sony колонки |
+| `blespam -t marshall` | Спам на Marshall колонки |
 | `spoofat -t <index>` | Спуфинг AirTag по индексу из list -t |
 
 ### Списки
@@ -332,28 +351,71 @@ npm run dev
 
 ## Сценарии
 
-18 готовых сценариев во вкладке **Scenarios**. Пошаговое выполнение с возможностью отмены.
+20 готовых сценариев во вкладке **Scenarios**. Пошаговое выполнение с прогресс-баром и возможностью отмены.
 
-| Сценарий | Шаги |
-|----------|------|
-| **Quick Recon** | scanall → list -a → list -c → sniffpmkid -d |
-| **Beacon Flood** | ssid -a -g 50 → list -s → attack -t beacon -l |
-| **Deauth Flood** | scanall → list -a (input) → select -a → attack -t deauth |
-| **Deauth Targeted** | scanall → list -c → attack -t deauth -c |
-| **AP Clone Spam** | scanall → list -a (input) → select -a → attack -t beacon -a |
-| **Clone + Deauth** | scanall → list -a (input) → select -a → beacon -a → deauth |
-| **PMKID Capture** | scanall → list -a (input) → select -a → sniffpmkid -d -l |
-| **BLE Scan** | sniffbt |
-| **BLE Discovery** | sniffbt → sniffbt -t airtag → sniffbt -t flipper → sniffbt -t meta |
-| **AirTag Hunt** | sniffbt -t airtag → list -t |
-| **BLE Spam** | blespam -t all |
-| **Funny Beacon** | attack -t funny |
-| **Evil Portal** | scanall → list -a (input) → setap → evilportal -c start |
-| **Network Scan** | pingscan → arpscan → list -i |
-| **GPS Wardrive** | gpsdata → wardrive |
-| **MAC Randomize** | randapmac → randstamac |
-| **Save Session** | scanall → list -a → save -a → save -s |
-| **AP Info Dump** | list -a → info -a 0 → info -a 1 → info -a 2 |
+| Сценарий | Шаги | Предупреждение |
+|----------|------|----------------|
+| **Quick Recon** | scanall → list -a → list -c → sniffpmkid -d | — |
+| **Beacon Flood** | ssid -a -g 50 → list -s → attack -t beacon -l | ⚠️ |
+| **Deauth Flood** | scanall → list -a (input) → select -a → attack -t deauth | ⚠️ |
+| **Deauth Targeted** | scanall → list -c → attack -t deauth -c | ⚠️ |
+| **AP Clone Spam** | scanall → list -a (input) → select -a → attack -t beacon -a | ⚠️ |
+| **Clone + Deauth** | scanall → list -a (input) → select -a → beacon -a → deauth | ⚠️ |
+| **PMKID Capture** | scanall → list -a (input) → select -a → sniffpmkid -d -l | — |
+| **BLE Scan** | sniffbt | — |
+| **BLE Discovery** | sniffbt → sniffbt -t airtag → sniffbt -t flipper → sniffbt -t meta | — |
+| **AirTag Hunt** | sniffbt -t airtag → list -t | — |
+| **BLE Spam** | blespam -t all | ⚠️ |
+| **Funny Beacon** | attack -t funny | ⚠️ |
+| **Evil Portal** | scanall → list -a (input) → setap → evilportal -c start | ⚠️ |
+| **Network Scan** | pingscan → arpscan → list -i | — |
+| **GPS Wardrive** | gpsdata → wardrive | — |
+| **MAC Randomize** | randapmac → randstamac | ⚠️ |
+| **Save Session** | scanall → list -a → save -a → save -s | — |
+| **AP Info Dump** | list -a → info -a {idx} (для каждого AP) | — |
+| **Speaker Hunter** | sniffbt → sniffbt -t speaker/jbl/bose/sony/marshall → list → blespam -t speaker | ⚠️ |
+| **Speaker Kill** | sniffbt → blespam -t all | ⚠️ |
+
+---
+
+## Speaker Hunter
+
+Набор инструментов для поиска и атаки на Bluetooth-колонки.
+
+### Как работает
+
+1. **Сканирование** — `sniffbt -t speaker` ищет BLE-устройства с сигнатурами колонок
+2. **Определение бренда** — целевой скан по каждому бренду (JBL/Bose/Sony/Marshall)
+3. **Атака** — `blespam -t speaker` отправляет BLE-пакеты, вызывающие popup-уведомления на колонке
+4. **Отключение** — постоянный спам забивает канал связи колонки
+
+### Доступные команды
+
+| Команда | Описание |
+|---------|----------|
+| `sniffbt -t speaker` | Поиск всех BLE-колонок |
+| `sniffbt -t jbl` | Поиск JBL колонок |
+| `sniffbt -t bose` | Поиск Bose колонок |
+| `sniffbt -t sony` | Поиск Sony колонок |
+| `sniffbt -t marshall` | Поиск Marshall колонок |
+| `blespam -t speaker` | Спам на все колонки |
+| `blespam -t jbl` | Спам на JBL |
+| `blespam -t bose` | Спам на Bose |
+| `blespam -t sony` | Спам на Sony |
+| `blespam -t marshall` | Спам на Marshall |
+
+### Сценарии
+
+- **Speaker Hunter** — полное сканирование всех брендов + атака
+- **Speaker Kill** — агрессивная атака всеми типами BLE-спама
+
+### Кнопки в Dashboard
+
+В разделе **BLE** доступны:
+- 🔵 **Scan**: Speakers, JBL, Bose, Sony, Marshall
+- ⚠️ **Attack**: Spk Spam, JBL Spam, Bose Spam, Sony Spam, Mshall Spam
+
+> **Важно:** Команды `blespam -t speaker/jbl/bose/sony/marshall` требуют поддержки в прошивке ESP32 Marauder. Если прошивка не поддерживает эти варианты, `blespam -t all` работает как универсальная атака.
 
 ---
 
@@ -420,12 +482,10 @@ taskkill /PID <номер> /F
 
 ## Производительность и архитектура
 
-Версия 0.5.0 содержит комплексные оптимизации и рефакторинг по результатам статического аудита.
-
 ### Оптимизации парсера
 
 - **O(1) dispatch по первому символу** — `_DISPATCH` map с 14 кодпоинтами
-- **Firmware profiles** — парсер вынесен в `services/firmwareProfiles/marauderV1.js` для поддержки разных версий прошивки
+- **Firmware profiles** — парсер вынесен в `services/firmwareProfiles/marauderV1.ts` для поддержки разных версий прошивки
 - **O(1) поиск AP** — maintained indexes `_byBssid` и `_byIndex`
 
 ### Рефакторинг serialStore (SRP)
@@ -434,29 +494,29 @@ taskkill /PID <номер> /F
 
 | Модуль | Ответственность |
 |--------|----------------|
-| `serialStore.js` | Состояние, терминал, public API |
-| `services/serialReader.js` | Read loop, TextDecoder, buffer trimming |
-| `services/commandExecutor.js` | sendCommand, sendAndWait, sendSequence |
-| `services/serialReconnect.js` | Auto-reconnect, device plug/unplug |
+| `serialStore.ts` | Состояние, терминал, public API |
+| `services/serialReader.ts` | Read loop, TextDecoder, buffer trimming |
+| `services/commandExecutor.ts` | sendCommand, sendAndWait, sendSequence |
+| `services/serialReconnect.ts` | Auto-reconnect, device plug/unplug |
 
 ### Централизованная санитизация
 
-- `utils/sanitize.js` — `sanitizeText()`, `sanitizeAscii()`, `normalizeMac()`, `safeParseInt()`
+- `utils/sanitize.ts` — `sanitizeText()`, `sanitizeAscii()`, `normalizeMac()`, `safeParseInt()`
 - Все входящие данные проходят через `sanitizeText()` перед отображением
 - Защита от ANSI escape, control characters, non-printable unicode
 
 ### Сервисы общего назначения
 
-- `utils/uuid.js` — RFC 4122 v4 UUID + `recordKey()` для IndexedDB (вместо `JSON.stringify`)
-- `utils/logger.js` — Ring-buffer logger с уровнями (debug/info/warn/error)
-- `utils/metrics.js` — Rolling counters: lines/sec, parser dispatches, misses
+- `utils/uuid.ts` — RFC 4122 v4 UUID + `recordKey()` для IndexedDB (вместо `JSON.stringify`)
+- `utils/logger.ts` — Ring-buffer logger с уровнями (debug/info/warn/error)
+- `utils/metrics.ts` — Rolling counters: lines/sec, parser dispatches, misses
 
 ### Оптимизации stores
 
 - **Maintained indexes** — `_byBssid` и `_byIndex` обновляются инкрементально
 - **shallowRef + triggerRef** — мутации in-place вместо `new Map(...)` копирования
 - **push/shift вместо spread** — O(1) вместо O(N) для FIFO буферов
-- **debounced + throttle save** — debounce 1s + max wait 5s
+- **debounced + throttle save** — debounce 1s + max wait 5s + beforeunload flush
 
 ### Оптимизации UI
 
@@ -466,6 +526,17 @@ taskkill /PID <номер> /F
 ### Batch processing
 
 - **queueMicrotask** — батчит строки в один microtask, не блокирует serial read loop
+
+### Безопасность
+
+- **CSP strict в production** — `script-src 'self'` без `unsafe-eval`/`unsafe-inline` (Vite-плагин `cspPlugin()`)
+- **Excel Formula Injection** — CSV-экспорт экранирует `=+−@` префиксы (OWASP)
+- **USB vendor whitelist** — только CP2102, CH340, FTDI, ESP32-S2
+- **beforeunload persistence** — данные сохраняются при закрытии вкладки
+- **Memory bounds** — max 1000 APs, 2000 BLE devices в store, LRU eviction
+- **Graceful disconnect** — очистка terminalOutput при отключении
+- **ARIA labels** — accessibility для кнопок и навигации
+- **Keyboard navigation** — tabindex на строках таблиц AP/BLE
 
 ### Метрики
 
@@ -477,6 +548,61 @@ taskkill /PID <номер> /F
 | SerialStore responsibilities | 6+ | 4 modules |
 | IDB key generation | JSON.stringify | UUID/recordKey |
 | Data sanitization | ad-hoc | centralized |
+
+---
+
+## Changelog
+
+### v0.5.2 (2026-06-03) — Security Hardening
+
+- **A5: CSP strict в production** — Vite-плагин `cspPlugin()` через `transformIndexHtml`. В build-режиме CSP: `script-src 'self'` (без `unsafe-eval`/`unsafe-inline`). Dev сохраняет relaxed CSP для HMR.
+- **BLE Explorer redesign** — полный перепис компонента:
+  - Multi-select (checkbox + click) с Select All / Deselect All
+  - Contextual action bar: Sniff, Stop, Spoof AirTag, Speaker Spam, BLE Spam All, Copy MACs
+  - Сортировка по Signal / Name / Type / Packets
+  - Auto-detection типа: AirTag (red), Speaker (amber), BLE (gray)
+  - Per-row actions: Copy MAC, Spoof (AirTag only), Spam (Speaker only)
+  - ConfirmDialog для деструктивных действий
+- **BLE device identification** — OUI vendor lookup через `lookupVendor(mac)` для всех BLE-устройств (~1148 MAC prefixes). Поиск фильтрует по vendor.
+- **BLE cleanup removal** — убран 30-секундный таймер автоудаления устройств. Устройства сохраняются до явной очистки. Добавлен `MAX_BLE_DEVICES = 2000` с LRU eviction.
+- **Speaker auto-detection** — автоматическое определение колонок по имени (jbl, bose, sony, marshall, etc.)
+
+### v0.5.1 (2026-06-03) — TypeScript Migration
+
+- Все 5 stores, 7 services, 11 utils, 1 composable, 4 type definition files мигрированы на TypeScript
+- Остались JS только: `main.js` (entry point), `ouiData.js` (28KB data file)
+- `tsconfig.json`: `strict: false`, `noImplicitAny: false` — 28 `any` типов в 11 файлах
+- 177/177 тестов проходят
+
+### v0.5.0 (2026-06-02) — Audit-Driven Refactoring
+
+- **SRP split serialStore** — разделён на 4 модуля:
+  - `serialStore.ts` — состояние, терминал, public API
+  - `services/serialReader.ts` — read loop, TextDecoder, buffer trimming
+  - `services/commandExecutor.ts` — sendCommand, sendAndWait, sendSequence
+  - `services/serialReconnect.ts` — auto-reconnect state machine
+- **ParserEngine firmware profiles** — парсеры вынесены в `services/firmwareProfiles/marauderV1.ts`
+- **Утилиты** — `sanitize.ts`, `uuid.ts`, `logger.ts`, `metrics.ts`
+- 9 bug fixes по результатам deep audit:
+  - **B1**: Exit Demo стирает IndexedDB → убраны `clearAPs()/clearDevices()/clearProbes()` из exit path
+  - **B2**: False "error" в Action Log → regex `/(?:^|\n)\s*(?:\[ERROR\]|error\b|failed\b)/i` вместо `includes('error')`
+  - **B3**: `blespam`/`spoofat` без `needsTarget: true` → добавлено в 12 команд
+  - **B4**: Double Connect error → убран дубликат из handleConnect
+  - **B5**: Select всегда ставил `isSelected: true` → toggle через `!selectedAP.value.isSelected`
+  - **B6**: Workflow "Done ✓" после error → guard `if (!aborted.value)`
+  - **B7**: Dead code `actions = []` → `clearActions()` + import
+  - **B8**: `waitForInput` через `requestAnimationFrame` → `setTimeout(check, 100)`
+  - **B9**: bleStore без device limit → `MAX_BLE_DEVICES = 2000` + eviction
+
+### v0.4.3 (2026-06-01) — Performance Audit
+
+- `terminalOutput` push+shift+triggerRef вместо spread
+- Parser O(1) dispatch по первому символу (14 кодпоинтов)
+- BSSID/index maintained indexes в apStore
+- `eventsReversed` computed вместо `slice().reverse()`
+- `queueMicrotask` batching для serial line processing
+- BLE cleanup 30s timer (позже убран в v0.5.2)
+- Debounced persistence (1s debounce + 5s max wait + beforeunload flush)
 
 ---
 

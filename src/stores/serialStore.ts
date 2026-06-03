@@ -1,39 +1,48 @@
 import { defineStore } from 'pinia'
-import { ref, shallowRef, triggerRef } from 'vue'
+import { ref, shallowRef, triggerRef, type Ref, type ShallowRef } from 'vue'
 import { useApStore } from './apStore'
 import { parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil, resetParserState } from '../services/parserEngine'
 import { sanitizeText } from '../utils/sanitize'
 import { logger } from '../utils/logger'
 import { metrics } from '../utils/metrics'
-import { createSerialReader } from '../services/serialReader'
-import { createCommandExecutor } from '../services/commandExecutor'
-import { createReconnectManager } from '../services/serialReconnect'
+import { createSerialReader, type SerialReader } from '../services/serialReader'
+import { createCommandExecutor, type CommandExecutor } from '../services/commandExecutor'
+import { createReconnectManager, type ReconnectManager } from '../services/serialReconnect'
+import type { TerminalLineType } from '../types/serial'
+
+interface SerialPortLike {
+  readable?: ReadableStream<Uint8Array> | null
+  writable: WritableStream<Uint8Array> | null
+  open?(options: { baudRate: number }): Promise<void>
+  close?(): Promise<void>
+  getInfo?(): { usbVendorId?: number; usbProductId?: number }
+}
 
 const TERMINAL_MAX_LINES = 2000
 
 export const useSerialStore = defineStore('serial', () => {
-  const port = ref(null)
+  const port = ref<SerialPortLike | null>(null)
   const isConnected = ref(false)
   const isDemoMode = ref(false)
-  const terminalOutput = shallowRef([])
+  const terminalOutput = shallowRef<Array<{ text: string; cls: string }>>([])
   const baudRate = ref(115200)
   const autoReconnect = ref(true)
   const reconnectAttempts = ref(0)
-  const lastConnectedPortInfo = ref(null)
+  const lastConnectedPortInfo = ref<{ usbVendorId?: number; usbProductId?: number } | null>(null)
 
-  let _lineHandlers = []
-  let _pendingLines = []
+  let _lineHandlers: Array<(line: string) => void> = []
+  let _pendingLines: string[] = []
   let _microtaskScheduled = false
 
-  const reader = createSerialReader()
-  let _reconnect = null
+  const reader: SerialReader = createSerialReader()
+  let _reconnect: ReconnectManager | null = null
 
-  const onLine = (handler) => {
+  const onLine = (handler: (line: string) => void): (() => void) => {
     _lineHandlers.push(handler)
     return () => { _lineHandlers = _lineHandlers.filter(h => h !== handler) }
   }
 
-  const _notifyLine = (text) => {
+  const _notifyLine = (text: string): void => {
     _pendingLines.push(text)
     if (!_microtaskScheduled) {
       _microtaskScheduled = true
@@ -48,7 +57,7 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
-  const TERMINAL_TYPES = {
+  const TERMINAL_TYPES: Record<TerminalLineType, string> = {
     normal: 'text-green-400',
     success: 'text-blue-400',
     error: 'text-red-500',
@@ -58,7 +67,7 @@ export const useSerialStore = defineStore('serial', () => {
     system: 'text-cyan-400'
   }
 
-  const addToTerminal = (text, type = 'normal') => {
+  const addToTerminal = (text: string, type: TerminalLineType = 'normal'): void => {
     const safe = sanitizeText(text, { maxLength: 8192 })
     if (!safe) return
     _notifyLine(safe)
@@ -71,11 +80,11 @@ export const useSerialStore = defineStore('serial', () => {
     triggerRef(terminalOutput)
   }
 
-  const _simulateDemoCommand = (command) => {
+  const _simulateDemoCommand = (command: string): void => {
     const apStore = useApStore()
-    const genMAC = () => Array.from({length:6},()=>Math.floor(Math.random()*256).toString(16).padStart(2,'0')).join(':').toUpperCase()
-    const genRSSI = () => -(Math.floor(Math.random()*40)+40)
-    const genCH = () => Math.floor(Math.random()*13)+1
+    const genMAC = (): string => Array.from({length:6},()=>Math.floor(Math.random()*256).toString(16).padStart(2,'0')).join(':').toUpperCase()
+    const genRSSI = (): number => -(Math.floor(Math.random()*40)+40)
+    const genCH = (): number => Math.floor(Math.random()*13)+1
 
     if (['scanall','sniffbeacon','list'].some(s => command.startsWith(s))) {
       parseDemoAP()
@@ -109,14 +118,14 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
-  const _buildConnect = (targetPort) => async (portArg = null) => {
-    if (!navigator.serial) {
+  const _buildConnect = (targetPort?: SerialPortLike | null) => async (portArg: SerialPortLike | null = null): Promise<boolean> => {
+    if (!(navigator as any).serial) {
       throw new Error('Web Serial API not supported — use Chrome or Edge with HTTPS')
     }
     let next = portArg
     if (!next) {
       try {
-        next = await navigator.serial.requestPort({
+        next = await (navigator as any).serial.requestPort({
           filters: [
             { usbVendorId: 0x10C4, usbProductId: 0xEA60 },
             { usbVendorId: 0x1A86, usbProductId: 0x7523 },
@@ -126,7 +135,7 @@ export const useSerialStore = defineStore('serial', () => {
           ]
         })
       } catch (e) {
-        if (e.name === 'NotFoundError') {
+        if ((e as Error).name === 'NotFoundError') {
           throw new Error('No device selected. Make sure ESP32 is connected and drivers installed (CP210x/CH340).')
         }
         throw e
@@ -134,54 +143,55 @@ export const useSerialStore = defineStore('serial', () => {
     }
     port.value = next
     try {
-      await port.value.open({ baudRate: baudRate.value })
+      await port.value.open?.({ baudRate: baudRate.value })
     } catch (e) {
       port.value = null
-      throw new Error(`Failed to open serial port: ${e.message}. Check baud rate (${baudRate.value}) and USB connection.`)
+      throw new Error(`Failed to open serial port: ${(e as Error).message}. Check baud rate (${baudRate.value}) and USB connection.`)
     }
     if (!port.value.readable) {
-      await port.value.close()
+      await port.value.close?.()
       port.value = null
       throw new Error('Serial port has no readable stream (try a different USB port)')
     }
     try {
       const info = port.value.getInfo?.() || {}
-      lastConnectedPortInfo.value = info
+      lastConnectedPortInfo.value = info as { usbVendorId?: number; usbProductId?: number }
     } catch (e) {
-      logger.warn('port.getInfo failed', e?.message, 'serial')
+      logger.warn('port.getInfo failed', (e as Error)?.message, 'serial')
     }
     isConnected.value = true
     reconnectAttempts.value = 0
     addToTerminal('Connected', 'success')
-    _reconnect.installListeners()
-    await reader.start(port.value, addToTerminal)
+    _reconnect!.installListeners()
+    await reader.start(port.value as any, addToTerminal)
     return true
   }
 
-  const connect = async (portArg = null) => {
+  const connect = async (portArg: SerialPortLike | null = null): Promise<boolean> => {
     const fn = _buildConnect()
     return fn(portArg)
   }
 
-  const disconnect = async () => {
-    _reconnect.cancel()
-    _reconnect.uninstallListeners()
+  const disconnect = async (): Promise<void> => {
+    _reconnect!.cancel()
+    _reconnect!.uninstallListeners()
     await reader.stop()
     if (port.value) {
-      try { await port.value.close() } catch (e) {
-        logger.warn('port.close during disconnect', e?.message, 'serial')
+      try { await port.value.close?.() } catch (e) {
+        logger.warn('port.close during disconnect', (e as Error)?.message, 'serial')
       }
       port.value = null
     }
     isConnected.value = false
     resetParserState()
+    terminalOutput.value = []
     addToTerminal('Disconnected', 'error')
   }
 
   const apStore = useApStore()
-  const executor = createCommandExecutor({
+  const executor: CommandExecutor = createCommandExecutor({
     isDemoMode,
-    port,
+    port: port as any,
     onLine,
     addToTerminal,
     simulateDemo: _simulateDemoCommand,
@@ -189,13 +199,13 @@ export const useSerialStore = defineStore('serial', () => {
     clearSelected: () => apStore.clearSelected()
   })
 
-  const _wrappedConnect = async (portArg = null) => {
+  const _wrappedConnect = async (portArg: SerialPortLike | null = null): Promise<boolean> => {
     try {
       return await _buildConnect(portArg)()
     } catch (e) {
       isConnected.value = false
-      addToTerminal(`Connection failed: ${e.message}`, 'error')
-      _reconnect.schedule()
+      addToTerminal(`Connection failed: ${(e as Error).message}`, 'error')
+      _reconnect!.schedule()
       throw e
     }
   }
@@ -210,21 +220,21 @@ export const useSerialStore = defineStore('serial', () => {
     addToTerminal
   })
 
-  const connectPublic = async (portArg = null) => {
+  const connectPublic = async (portArg: SerialPortLike | null = null): Promise<boolean> => {
     try {
       return await _buildConnect()(portArg)
     } catch (e) {
       isConnected.value = false
-      addToTerminal(`Connection failed: ${e.message}`, 'error')
+      addToTerminal(`Connection failed: ${(e as Error).message}`, 'error')
       _reconnect.schedule()
       throw e
     }
   }
 
-  const scanAll = async () => {
+  const scanAll = async (): Promise<void> => {
     if (isDemoMode.value) {
       addToTerminal('> scanall (demo)', 'command')
-      await new Promise(r => setTimeout(r, 1500))
+      await new Promise<void>(r => setTimeout(r, 1500))
       parseDemoAP()
       parseDemoBLE()
       addToTerminal('> stopscan (demo)', 'command')
@@ -239,7 +249,7 @@ export const useSerialStore = defineStore('serial', () => {
     ])
   }
 
-  const clearListAndScan = async () => {
+  const clearListAndScan = async (): Promise<void> => {
     await executor.sendSequence([
       'clearlist -a',
       { delay: 500 },
@@ -247,16 +257,16 @@ export const useSerialStore = defineStore('serial', () => {
     await scanAll()
   }
 
-  const clearOutput = () => {
+  const clearOutput = (): void => {
     terminalOutput.value = []
     triggerRef(terminalOutput)
   }
 
-  const toggleDemo = () => {
+  const toggleDemo = (): void => {
     isDemoMode.value = !isDemoMode.value
   }
 
-  const setTerminalOutput = (arr) => {
+  const setTerminalOutput = (arr: Array<{ text: string; cls: string }>): void => {
     terminalOutput.value = arr
     triggerRef(terminalOutput)
   }
@@ -270,7 +280,7 @@ export const useSerialStore = defineStore('serial', () => {
     sendSequence: executor.sendSequence,
     scanAll, clearListAndScan,
     addToTerminal, clearOutput, toggleDemo, onLine, setTerminalOutput,
-    cancelReconnect: () => _reconnect.cancel(),
-    scheduleReconnect: () => _reconnect.schedule()
+    cancelReconnect: () => _reconnect!.cancel(),
+    scheduleReconnect: () => _reconnect!.schedule()
   }
 })

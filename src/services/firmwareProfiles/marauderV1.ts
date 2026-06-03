@@ -18,7 +18,6 @@ const PROBE_SNIFF_RE = new RegExp(`^(-?\\d+)\\s+Ch:\\s*(\\d+)\\s+Client:\\s+(${M
 const PMKID_CAPTURE_RE = new RegExp(`Received EAPOL:\\s*(${MAC_RE.source})`)
 const BLE_SNIFF_MAC_RE = new RegExp(`^(-?\\d+)\\s+${MAC_RE.source}\\s*$`)
 
-let _bleKeyCounter = 0
 let _infoAPIndex = -1
 let _ipListBuffer: { index: number; ip: string; mac: string }[] = []
 
@@ -156,24 +155,40 @@ function parseBLESniff(line: string, ctx: ParserContext): boolean {
   const re = /^(-?\d+)\s+Device:\s+(.+)/
   const m1 = line.match(re)
   if (m1) {
-    const [, rssi, name] = m1
-    const isMac = MAC_RE.test(name)
-    ctx.bleStore.updateOrAddDevice({
-      mac: isMac ? name.toUpperCase() : `BLE:${rssi}-${++_bleKeyCounter}`,
-      rssi: safeInt(rssi) ?? 0,
-      name: isMac ? `BLE Device ${name}` : name.trim(),
-      lastSeen: new Date()
-    })
+    const [, rssi, rawName] = m1
+    const macMatch = rawName.match(MAC_RE)
+    if (macMatch) {
+      const mac = macMatch[1].toUpperCase()
+      const vendor = lookupVendor(mac)
+      ctx.bleStore.updateOrAddDevice({
+        mac,
+        rssi: safeInt(rssi) ?? 0,
+        name: vendor || `BLE Device ${mac}`,
+        manufacturer: vendor || '',
+        lastSeen: new Date()
+      })
+    } else {
+      const name = rawName.trim()
+      ctx.bleStore.updateOrAddDevice({
+        mac: `BLE:${name.toUpperCase()}`,
+        rssi: safeInt(rssi) ?? 0,
+        name,
+        lastSeen: new Date()
+      })
+    }
     ctx.dashStore.addEvent('ble', line)
     return true
   }
   const m2 = line.match(BLE_SNIFF_MAC_RE)
   if (m2) {
     const [, rssi, mac] = m2
+    const macUpper = mac.toUpperCase()
+    const vendor = lookupVendor(macUpper)
     ctx.bleStore.updateOrAddDevice({
-      mac: mac.toUpperCase(),
+      mac: macUpper,
       rssi: safeInt(rssi) ?? 0,
-      name: `BLE ${mac.toUpperCase()}`,
+      name: vendor || `BLE ${macUpper}`,
+      manufacturer: vendor || '',
       lastSeen: new Date()
     })
     ctx.dashStore.addEvent('ble', line)
@@ -187,10 +202,11 @@ function parseBLEMeta(line: string, ctx: ParserContext): boolean {
   const m = line.match(re)
   if (!m) return false
   const [, rssi, name] = m
+  const trimmed = name.trim()
   ctx.bleStore.updateOrAddDevice({
-    mac: `META:${rssi}`,
+    mac: `META:${trimmed.toUpperCase()}`,
     rssi: safeInt(rssi) ?? 0,
-    name: `Meta: ${name.trim()}`,
+    name: `Meta: ${trimmed}`,
     isAirtag: false,
     manufacturer: 'Meta/Ray-Ban',
     lastSeen: new Date()
@@ -362,7 +378,6 @@ export const META = {
 }
 
 export function resetState(): void {
-  _bleKeyCounter = 0
   _infoAPIndex = -1
   _ipListBuffer = []
 }

@@ -1,4 +1,41 @@
-export const COMMAND_GROUPS = [
+interface CommandEntry {
+  label: string
+  command: string
+  icon: string
+  ru?: string
+  color?: string
+  warning?: boolean
+}
+
+interface CommandGroup {
+  name: string
+  nameRu: string
+  commands: CommandEntry[]
+}
+
+interface WorkflowStep {
+  command: string
+  desc: string
+  delay?: number
+  requiresInput?: boolean
+  splitInput?: boolean
+  label?: string
+  placeholder?: string
+  forEachAP?: boolean
+  stopManual?: boolean
+}
+
+interface Workflow {
+  id: string
+  name: string
+  description: string
+  ru: string
+  icon: string
+  warning?: boolean
+  steps: WorkflowStep[]
+}
+
+export const COMMAND_GROUPS: CommandGroup[] = [
   {
     name: 'Scanning',
     nameRu: 'Сканирование',
@@ -75,6 +112,16 @@ export const COMMAND_GROUPS = [
         ru: 'Обнаружение Meta/Ray-Ban устройств по BLE.' },
       { label: 'Skim Sniff', command: 'sniffskim', icon: '💳',
         ru: 'Поиск BLE-скиммеров (HC-03, HC-05, HC-06).' },
+      { label: 'Sniff Speakers', command: 'sniffbt -t speaker', icon: '🔊',
+        ru: 'Поиск Bluetooth-колонок поблизости по BLE-сигнатуре.' },
+      { label: 'Sniff JBL', command: 'sniffbt -t jbl', icon: '🔊',
+        ru: 'Обнаружение JBL колонок по BLE.' },
+      { label: 'Sniff Bose', command: 'sniffbt -t bose', icon: '🔊',
+        ru: 'Обнаружение Bose колонок по BLE.' },
+      { label: 'Sniff Sony', command: 'sniffbt -t sony', icon: '🔊',
+        ru: 'Обнаружение Sony колонок по BLE.' },
+      { label: 'Sniff Marshall', command: 'sniffbt -t marshall', icon: '🔊',
+        ru: 'Обнаружение Marshall колонок по BLE.' },
       { label: 'BT Spam All', command: 'blespam -t all', icon: '📤', warning: true,
         ru: 'Рассылка всех типов BLE-спама одновременно.' },
       { label: 'Sour Apple', command: 'blespam -t sourapple', icon: '🍎', warning: true,
@@ -87,6 +134,16 @@ export const COMMAND_GROUPS = [
         ru: 'BLE-спам с идентификаторами Samsung Galaxy Watch.' },
       { label: 'Windows Spam', command: 'blespam -t windows', icon: '🪟', warning: true,
         ru: 'BLE-спам с Microsoft Swift Pair пакетами.' },
+      { label: 'Speaker Spam', command: 'blespam -t speaker', icon: '🔊', warning: true,
+        ru: 'BLE-спам на Bluetooth-колонки — вызывает popup-уведомления подключения.' },
+      { label: 'JBL Spam', command: 'blespam -t jbl', icon: '🔊', warning: true,
+        ru: 'BLE-спам на JBL колонки — вызывает popup-уведомления.' },
+      { label: 'Bose Spam', command: 'blespam -t bose', icon: '🔊', warning: true,
+        ru: 'BLE-спам на Bose колонки.' },
+      { label: 'Sony Spam', command: 'blespam -t sony', icon: '🔊', warning: true,
+        ru: 'BLE-спам на Sony колонки.' },
+      { label: 'Marshall Spam', command: 'blespam -t marshall', icon: '🔊', warning: true,
+        ru: 'BLE-спам на Marshall колонки.' },
       { label: 'Spoof AirTag', command: 'spoofat -t 0', icon: '🔄',
         ru: 'Спуфинг перехваченного AirTag (выберите индекс через list -t).' }
     ]
@@ -249,7 +306,7 @@ export const COMMAND_GROUPS = [
   }
 ]
 
-export const WORKFLOWS = [
+export const WORKFLOWS: Workflow[] = [
   {
     id: 'quick-recon',
     name: 'Quick Recon',
@@ -275,7 +332,7 @@ export const WORKFLOWS = [
     steps: [
       { command: 'ssid -a -g 50', desc: 'Generate 50 SSIDs' },
       { command: 'list -s', desc: 'Show generated' },
-      { command: 'attack -t beacon -l', desc: 'Broadcast beacons (stop manually)' }
+      { command: 'attack -t beacon -l', desc: 'Broadcast beacons (stop manually)', stopManual: true }
     ]
   },
   {
@@ -290,7 +347,7 @@ export const WORKFLOWS = [
       { command: 'stopscan', desc: 'Stop scanning' },
       { command: 'list -a', desc: 'Listing APs', delay: 2000 },
       { command: 'select -a {input}', desc: 'Select targets (comma-separated)', requiresInput: true, splitInput: true, label: 'AP indices', placeholder: '0,1,2' },
-      { command: 'attack -t deauth', desc: 'Deauth flood (stop manually)' }
+      { command: 'attack -t deauth', desc: 'Deauth flood (stop manually)', stopManual: true }
     ]
   },
   {
@@ -304,7 +361,7 @@ export const WORKFLOWS = [
       { command: 'scanall', desc: 'Scanning', delay: 5000 },
       { command: 'stopscan', desc: 'Stop scanning' },
       { command: 'list -c', desc: 'View stations', delay: 2000 },
-      { command: 'attack -t deauth -c', desc: 'Targeted deauth (stop manually)' }
+      { command: 'attack -t deauth -c', desc: 'Targeted deauth (stop manually)', stopManual: true }
     ]
   },
   {
@@ -319,7 +376,7 @@ export const WORKFLOWS = [
       { command: 'stopscan', desc: 'Stop scanning' },
       { command: 'list -a', desc: 'Listing APs', delay: 2000 },
       { command: 'select -a {input}', desc: 'Select targets (comma-separated)', requiresInput: true, splitInput: true, label: 'AP indices', placeholder: '0,1,2' },
-      { command: 'attack -t beacon -a', desc: 'Clone broadcast (stop manually)' }
+      { command: 'attack -t beacon -a', desc: 'Clone broadcast (stop manually)', stopManual: true }
     ]
   },
   {
@@ -335,7 +392,7 @@ export const WORKFLOWS = [
       { command: 'list -a', desc: 'Listing APs', delay: 2000 },
       { command: 'select -a {input}', desc: 'Select targets (comma-separated)', requiresInput: true, splitInput: true, label: 'AP indices', placeholder: '0,1' },
       { command: 'attack -t beacon -a', desc: 'Starting clone broadcast' },
-      { command: 'attack -t deauth', desc: 'Deauth originals (stop manually)' }
+      { command: 'attack -t deauth', desc: 'Deauth originals (stop manually)', stopManual: true }
     ]
   },
   {
@@ -401,7 +458,7 @@ export const WORKFLOWS = [
     icon: '📤',
     warning: true,
     steps: [
-      { command: 'blespam -t all', desc: 'All BLE spam (stop manually)' }
+      { command: 'blespam -t all', desc: 'All BLE spam (stop manually)', stopManual: true }
     ]
   },
   {
@@ -412,7 +469,7 @@ export const WORKFLOWS = [
     icon: '😂',
     warning: true,
     steps: [
-      { command: 'attack -t funny', desc: 'Funny beacon broadcast (stop manually)' }
+      { command: 'attack -t funny', desc: 'Funny beacon broadcast (stop manually)', stopManual: true }
     ]
   },
   {
@@ -427,7 +484,7 @@ export const WORKFLOWS = [
       { command: 'stopscan', desc: 'Stop scanning' },
       { command: 'list -a', desc: 'Listing APs', delay: 2000 },
       { command: 'evilportal -c setap {input}', desc: 'Set target AP index', requiresInput: true, label: 'AP index', placeholder: '0' },
-      { command: 'evilportal -c start', desc: 'Starting Evil Portal (stop manually)' }
+      { command: 'evilportal -c start', desc: 'Starting Evil Portal (stop manually)', stopManual: true }
     ]
   },
   {
@@ -453,7 +510,7 @@ export const WORKFLOWS = [
     steps: [
       { command: 'gpsdata', desc: 'Start GPS data', delay: 3000 },
       { command: 'stopscan', desc: 'Stop GPS' },
-      { command: 'wardrive', desc: 'Start wardriving (stop manually)' }
+      { command: 'wardrive', desc: 'Start wardriving (stop manually)', stopManual: true }
     ]
   },
   {
@@ -491,6 +548,43 @@ export const WORKFLOWS = [
     steps: [
       { command: 'list -a', desc: 'Listing APs', delay: 3000 },
       { command: 'info -a {idx}', desc: 'Info for each AP', forEachAP: true }
+    ]
+  },
+  {
+    id: 'speaker-hunter',
+    name: 'Speaker Hunter',
+    description: 'Find and attack Bluetooth speakers',
+    ru: 'Сканирование BLE-колонок поблизости, определение типа и атака спамом для вызова popup-уведомлений и отключения.',
+    icon: '🔊',
+    warning: true,
+    steps: [
+      { command: 'sniffbt', desc: 'General BLE scan', delay: 10000 },
+      { command: 'stopscan', desc: 'Stop scan' },
+      { command: 'sniffbt -t speaker', desc: 'Scanning for speakers', delay: 8000 },
+      { command: 'stopscan', desc: 'Stop scan' },
+      { command: 'sniffbt -t jbl', desc: 'Scanning for JBL', delay: 6000 },
+      { command: 'stopscan', desc: 'Stop scan' },
+      { command: 'sniffbt -t bose', desc: 'Scanning for Bose', delay: 6000 },
+      { command: 'stopscan', desc: 'Stop scan' },
+      { command: 'sniffbt -t sony', desc: 'Scanning for Sony', delay: 6000 },
+      { command: 'stopscan', desc: 'Stop scan' },
+      { command: 'sniffbt -t marshall', desc: 'Scanning for Marshall', delay: 6000 },
+      { command: 'stopscan', desc: 'Stop scan' },
+      { command: 'list -t', desc: 'Listing discovered devices' },
+      { command: 'blespam -t speaker', desc: 'Speaker spam — stop manually', stopManual: true }
+    ]
+  },
+  {
+    id: 'speaker-kill',
+    name: 'Speaker Kill',
+    description: 'Aggressive continuous attack on speakers',
+    ru: 'Массовая атака на все типы колонок одновременно. Непрерывный спам для отключения и блокировки.',
+    icon: '💀',
+    warning: true,
+    steps: [
+      { command: 'sniffbt', desc: 'Quick BLE scan', delay: 5000 },
+      { command: 'stopscan', desc: 'Stop scan' },
+      { command: 'blespam -t all', desc: 'All BLE spam (stop manually)', stopManual: true }
     ]
   }
 ]

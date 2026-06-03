@@ -1,4 +1,4 @@
-export async function copyToClipboard(text) {
+export async function copyToClipboard(text: string | null | undefined): Promise<boolean> {
   if (!text) return false
   if (navigator.clipboard && window.isSecureContext) {
     try {
@@ -25,7 +25,7 @@ export async function copyToClipboard(text) {
   }
 }
 
-export async function readFromClipboard() {
+export async function readFromClipboard(): Promise<string | null> {
   if (navigator.clipboard && window.isSecureContext) {
     try {
       return await navigator.clipboard.readText()

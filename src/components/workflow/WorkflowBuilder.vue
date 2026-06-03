@@ -65,6 +65,18 @@
               </div>
             </div>
 
+            <!-- Progress bar -->
+            <div v-if="isRunning" class="bg-slate-900/50 rounded-xl border border-slate-700/50 p-3">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[11px] font-medium text-slate-400">Step {{ currentStep + 1 }} of {{ selectedWorkflow.steps.length }}</span>
+                <span class="text-[11px] font-mono text-slate-500">{{ duration }}</span>
+              </div>
+              <div class="w-full bg-slate-800 rounded-full h-1.5">
+                <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-300"
+                  :style="{ width: ((currentStep + 1) / selectedWorkflow.steps.length * 100) + '%' }"></div>
+              </div>
+            </div>
+
             <!-- Execution log -->
             <div v-if="execLog.length" class="bg-slate-900/50 rounded-xl border border-slate-700/50 p-3">
               <h4 class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Execution Log</h4>
@@ -150,6 +162,8 @@ const execLog = ref([])
 const startTime = ref(null)
 const beforeSnapshot = ref(null)
 const cachedResults = ref(null)
+const durationTick = ref(0)
+let _durationInterval = null
 
 const addLog = (msg, icon = '•', color = 'text-slate-400') => {
   const t = new Date()
@@ -161,6 +175,7 @@ const addLog = (msg, icon = '•', color = 'text-slate-400') => {
 }
 
 const duration = computed(() => {
+  void durationTick.value
   if (!startTime.value) return ''
   const diff = Date.now() - startTime.value
   const m = Math.floor(diff / 60000)
@@ -232,6 +247,7 @@ const closeWorkflow = () => {
   isRunning.value = false
   selectedWorkflow.value = null
   cachedResults.value = null
+  if (_durationInterval) { clearInterval(_durationInterval); _durationInterval = null }
   if (serialStore.isConnected) {
     serialStore.sendCommand('stopscan')
   }
@@ -243,7 +259,7 @@ const waitForInput = (stepIndex) => {
       if (stepInputs.value[stepIndex] || aborted.value) {
         resolve(stepInputs.value[stepIndex] || '')
       } else {
-        requestAnimationFrame(check)
+        setTimeout(check, 100)
       }
     }
     check()
@@ -263,6 +279,8 @@ const executeWorkflow = async () => {
   aborted.value = false
   currentStep.value = 0
   startTime.value = Date.now()
+  durationTick.value = 0
+  _durationInterval = setInterval(() => { durationTick.value++ }, 1000)
   execLog.value = []
   addLog(`Starting "${wf.name}" — ${wf.steps.length} steps`, '▶', 'text-cyan-400')
 
@@ -272,6 +290,8 @@ const executeWorkflow = async () => {
     ble: bleStore.deviceCount,
     packets: dashStore.packetsCaptured
   }
+
+  let hasStopManual = false
 
   try {
     for (let i = 0; i < wf.steps.length; i++) {
@@ -283,6 +303,8 @@ const executeWorkflow = async () => {
       const step = wf.steps[i]
       let cmd = step.command
       addLog(`Step ${i + 1}: ${step.desc}`, '→', 'text-indigo-400')
+
+      if (step.stopManual) hasStopManual = true
 
       if (step.forEachAP) {
         const aps = apStore.sortedAPs
@@ -316,7 +338,9 @@ const executeWorkflow = async () => {
             break
           }
         }
-        addLog(`Done`, '✓', 'text-emerald-400')
+        if (!aborted.value) {
+          addLog(`Done`, '✓', 'text-emerald-400')
+        }
         continue
       }
 
@@ -350,6 +374,10 @@ const executeWorkflow = async () => {
               break
             }
           }
+          if (step.delay && !aborted.value) {
+            addLog(`Waiting ${step.delay / 1000}s...`, '◷', 'text-slate-400')
+            await new Promise(r => setTimeout(r, step.delay))
+          }
           continue
         }
 
@@ -361,6 +389,10 @@ const executeWorkflow = async () => {
         await serialStore.sendAndWait(cmd, step.delay ? step.delay + 5000 : 15000)
         dashStore.incrementCommands()
         addLog(`Sent: ${cmd}`, '⚡', 'text-yellow-400')
+        if (step.delay && !step.stopManual) {
+          addLog(`Waiting ${step.delay / 1000}s...`, '◷', 'text-slate-400')
+          await new Promise(r => setTimeout(r, step.delay))
+        }
         addLog(`Done`, '✓', 'text-emerald-400')
       } catch (e) {
         addLog(`Step ${i + 1} failed: ${e.message}`, '✕', 'text-red-400')
@@ -372,10 +404,16 @@ const executeWorkflow = async () => {
     addLog(`Workflow crashed: ${e.message}`, '✕', 'text-red-400')
   }
 
-  try {
-    await serialStore.sendAndWait('stopscan', 5000)
-    addLog('Sent: stopscan (cleanup)', '⏹', 'text-slate-400')
-  } catch (_) { }
+  if (!hasStopManual) {
+    try {
+      await serialStore.sendAndWait('stopscan', 5000)
+      addLog('Sent: stopscan (cleanup)', '⏹', 'text-slate-400')
+    } catch (_) { }
+  } else {
+    addLog('Attack running — use Stop button to halt', '⏹', 'text-amber-400')
+  }
+
+  if (_durationInterval) { clearInterval(_durationInterval); _durationInterval = null }
 
   if (!aborted.value) {
     completed.value = true

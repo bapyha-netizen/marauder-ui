@@ -233,10 +233,12 @@ describe('parseLine — ESP32 Marauder output parser', () => {
       expect(dev.mac).toBe('AA:BB:CC:11:22:33')
     })
 
-    it('generates unique key for non-MAC BLE names with same RSSI', () => {
+    it('deduplicates same BLE device name', () => {
       parseLine('-50 Device: AirPods')
       parseLine('-50 Device: AirPods')
-      expect(bleStore.deviceCount).toBe(2)
+      expect(bleStore.deviceCount).toBe(1)
+      const dev = Array.from(bleStore.devices.values())[0]
+      expect(dev.name).toBe('AirPods')
     })
   })
 
@@ -503,11 +505,6 @@ describe('parseLine — ESP32 Marauder output parser', () => {
       const { resetParserState, parseLine } = await import('../parserEngine.ts')
       parseLine('Index: 5')
       parseLine('BSSID: AA:BB:CC:11:22:33')
-      expect(() => resetParserState()).not.toThrow()
-    })
-
-    it('resets BLE key counter', async () => {
-      const { resetParserState } = await import('../parserEngine.ts')
       expect(() => resetParserState()).not.toThrow()
     })
   })

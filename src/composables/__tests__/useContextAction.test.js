@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useContextAction } from '../useContextAction.js'
-import { SEVERITY } from '../../services/commandMeta.js'
+
+vi.mock('../../utils/actionDispatcher', () => ({
+  getPrereqState: vi.fn(() => ({ ok: true, reason: null }))
+}))
+
+import { useContextAction } from '../useContextAction.ts'
+import { SEVERITY } from '../../services/commandMeta.ts'
 
 function makeSerialStore(connected = true) {
   return { isConnected: connected }

@@ -32,8 +32,8 @@ export interface DashStoreLike {
   setChannelUtilization(util: ChannelUtilization): void
   setLastStationAP(index: number, name: string): void
   setIPList(list: IPListEntry[]): void
-  setSelectedAPInfo(info: string): void
-  addIP(ip: string): void
+  setSelectedAPInfo?(info: string): void
+  addIP?(ip: string): void
 }
 
 export type ParserFn = (line: string, ctx: ParserContext) => boolean

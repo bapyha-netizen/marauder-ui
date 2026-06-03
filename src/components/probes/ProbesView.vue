@@ -156,6 +156,7 @@ const showConfirm = (payload) => {
 const executeAction = async (payload) => {
   try {
     await runAction({ ...payload, options: { confirm: false } })
+    if (payload.cmd.startsWith('clearlist')) probeStore.clearProbes()
   } catch (e) {
     toastShow(`Failed: ${e.message}`, 'error')
   }

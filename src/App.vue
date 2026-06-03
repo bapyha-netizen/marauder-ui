@@ -29,13 +29,16 @@
           {{ serialStore.isDemoMode ? 'Exit Demo' : 'Try Demo' }}
         </button>
           <button @click="handleEmergencyStop" v-if="serialStore.isConnected"
-            class="btn-emergency text-[11px]" title="Emergency stop all scans/attacks">
+            class="btn-emergency text-[11px]" title="Emergency stop all scans/attacks"
+            aria-label="Emergency stop all scans and attacks">
             ■ Stop
           </button>
-        <button @click="handleConnect" v-if="!serialStore.isConnected" class="btn-success text-[11px]">
+        <button @click="handleConnect" v-if="!serialStore.isConnected" class="btn-success text-[11px]"
+          aria-label="Connect to ESP32 device">
           Connect
         </button>
-        <button @click="handleDisconnect" v-if="serialStore.isConnected" class="btn-danger text-[11px]">
+        <button @click="handleDisconnect" v-if="serialStore.isConnected" class="btn-danger text-[11px]"
+          aria-label="Disconnect from ESP32 device">
           Disconnect
         </button>
       </div>
@@ -45,8 +48,9 @@
     <div class="flex-1 flex flex-col min-h-0 p-4 gap-3">
 
       <!-- Tabs -->
-      <nav class="flex space-x-1">
+      <nav class="flex space-x-1" role="tablist" aria-label="Main navigation">
         <button v-for="tab in tabs" :key="tab.id" @click="activeTab = tab.id"
+          role="tab" :aria-selected="activeTab === tab.id" :aria-label="tab.label"
           class="px-3.5 py-1.5 text-xs font-medium rounded-lg transition-all duration-150"
           :class="activeTab === tab.id
             ? 'bg-indigo-600 text-white shadow-sm'
@@ -210,7 +214,8 @@ watch(() => serialStore.terminalOutput.length, (newLen, oldLen) => {
   if (lines.length > lastLength) {
     for (let i = lastLength; i < lines.length; i++) {
       try {
-        parseLine(lines[i].replace(/<[^>]+>/g, ''))
+        const raw = typeof lines[i] === 'string' ? lines[i] : lines[i].text || ''
+        parseLine(raw.replace(/<[^>]+>/g, ''))
       } catch (e) {
         console.error('Parse error:', e, lines[i])
       }
@@ -225,7 +230,6 @@ const handleConnect = async () => {
     toastShow('Connected to ESP32', 'success')
   } catch (e) {
     const msg = e.message
-    serialStore.addToTerminal(`Connection failed: ${msg}`, 'error')
     toastShow(msg, 'error')
     if (msg.includes('Web Serial API')) {
       serialStore.addToTerminal('Use Chrome/Edge with HTTPS or localhost', 'warning')
@@ -255,8 +259,7 @@ const toggleDemoMode = async () => {
     if (demoInterval.value) clearInterval(demoInterval.value)
     serialStore.setTerminalOutput([])
     lastLength = 0
-    apStore.clearAPs(); bleStore.clearDevices(); dashStore.resetStats()
-    probeStore.clearProbes()
+    dashStore.resetStats()
   }
 }
 </script>

@@ -1,15 +1,19 @@
-function escCsv(value) {
-  if (value === null || value === undefined) return ''
-  const s = String(value)
-  if (/[",\n]/.test(s)) {
-    return `"${s.replace(/"/g, '""')}"`
-  }
-  return s
+function escCsv(value: any): string {
+    if (value === null || value === undefined) return ''
+    let s = String(value)
+    // Prevent Excel formula injection
+    if (/^[=+\-@]/.test(s)) {
+        s = "'" + s
+    }
+    if (/[",\n]/.test(s)) {
+        return `"${s.replace(/"/g, '""')}"`
+    }
+    return s
 }
 
-function pad2(n) { return n < 10 ? '0' + n : '' + n }
+function pad2(n: number): string { return n < 10 ? '0' + n : '' + n }
 
-function isoTime(d) {
+function isoTime(d: Date | string | number | null | undefined): string {
   if (!d) return ''
   const dt = (d instanceof Date) ? d : new Date(d)
   if (isNaN(dt.getTime())) return ''
@@ -22,7 +26,7 @@ function isoTime(d) {
   return `${y}-${mo}-${da} ${h}:${mi}:${se}`
 }
 
-export function apsToWigle(aps) {
+export function apsToWigle(ps: any[]): string {
   const HEADER = [
     'MAC',
     'SSID',
@@ -37,7 +41,7 @@ export function apsToWigle(aps) {
     'Type'
   ]
   const rows = [HEADER.join(',')]
-  for (const ap of aps) {
+  for (const ap of ps) {
     const mac = (ap.bssid || '').toUpperCase()
     if (!mac || !/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(mac)) continue
     const row = [
@@ -58,7 +62,7 @@ export function apsToWigle(aps) {
   return rows.join('\n')
 }
 
-export function bleToWigle(ble) {
+export function bleToWigle(ble: any[]): string {
   const HEADER = [
     'MAC',
     'Name',
@@ -82,7 +86,7 @@ export function bleToWigle(ble) {
   return rows.join('\n')
 }
 
-export function probesToWigle(probes) {
+export function probesToWigle(probes: any[]): string {
   const HEADER = [
     'ClientMAC',
     'SSID',
@@ -108,7 +112,7 @@ export function probesToWigle(probes) {
   return rows.join('\n')
 }
 
-export function downloadWigle(filename, content) {
+export function downloadWigle(filename: string, content: string): void {
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

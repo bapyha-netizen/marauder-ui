@@ -1,14 +1,53 @@
 /// <reference types="vitest" />
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 import checker from 'vite-plugin-checker'
 import { resolve } from 'path'
 
+const DEV_CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "connect-src 'self' https://*.tile.openstreetmap.org https://*.googleapis.com https://*.gstatic.com",
+  "font-src 'self' data:",
+  "worker-src 'self' blob:"
+].join('; ')
+
+const PROD_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "connect-src 'self' https://*.tile.openstreetmap.org https://*.googleapis.com https://*.gstatic.com",
+  "font-src 'self' data:",
+  "worker-src 'self' blob:"
+].join('; ')
+
+function cspPlugin(): Plugin {
+  return {
+    name: 'csp-inject',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, ctx) {
+        const isBuild = Boolean(ctx.bundle)
+        const csp = isBuild ? PROD_CSP : DEV_CSP
+        const tag = `<meta http-equiv="Content-Security-Policy" content="${csp}">`
+        if (/<meta http-equiv="Content-Security-Policy"[^>]*>/.test(html)) {
+          return html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, tag)
+        }
+        return html.replace(/<head>/, `<head>\n    ${tag}`)
+      }
+    }
+  }
+}
+
 export default defineConfig({
   base: '/marauder-ui/',
   plugins: [
     vue(),
+    cspPlugin(),
     checker({ typescript: true }),
     VitePWA({
       registerType: 'autoUpdate',

@@ -1,25 +1,25 @@
-export const escHtml = (s) => String(s)
+export const escHtml = (s: any): string => String(s)
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#039;')
 
-export const signalClass = (rssi) => {
+export const signalClass = (rssi: number | null | undefined): string => {
   if (rssi === null || rssi === undefined) return 'text-slate-500'
   if (rssi > -70) return 'text-emerald-400'
   if (rssi > -85) return 'text-amber-400'
   return 'text-red-400'
 }
 
-export const dotClass = (rssi) => {
+export const dotClass = (rssi: number | null | undefined): string => {
   if (rssi === null || rssi === undefined) return 'bg-slate-500'
   if (rssi > -70) return 'bg-emerald-500'
   if (rssi > -85) return 'bg-amber-500'
   return 'bg-red-500'
 }
 
-export const fmtTimeRelative = (t) => {
+export const fmtTimeRelative = (t: string | Date | number | null | undefined): string => {
   if (!t) return ''
   const diff = Math.max(0, Math.floor((Date.now() - new Date(t).getTime()) / 1000))
   if (diff < 60) return `${diff}s`
@@ -28,13 +28,13 @@ export const fmtTimeRelative = (t) => {
   return `${Math.floor(diff / 86400)}d`
 }
 
-export const fmtTimeHM = (t) => {
+export const fmtTimeHM = (t: string | Date | number | null | undefined): string => {
   if (!t) return ''
   const d = new Date(t)
   return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
 }
 
-export const fmtTimeHMS = (t) => {
+export const fmtTimeHMS = (t: string | Date | number | null | undefined): string => {
   if (!t) return ''
   const d = new Date(t)
   return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`

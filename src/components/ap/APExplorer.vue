@@ -45,7 +45,9 @@
           <template v-for="ap in filteredAPs" :key="ap.bssid">
             <tr class="border-t border-slate-700/30 hover:bg-slate-700/30 cursor-pointer transition-colors"
               :class="ap.isSelected ? 'bg-indigo-500/10' : ''"
-              @click="toggleExpand(ap.bssid)">
+              tabindex="0"
+              @click="toggleExpand(ap.bssid)"
+              @keydown.enter.space.prevent="toggleExpand(ap.bssid)">
               <td class="px-3 py-2" @click.stop>
                 <input type="checkbox" :checked="ap.isSelected" @change="toggleSelect(ap)" :disabled="!ctx.isConnected.value" class="accent-indigo-500 cursor-pointer disabled:opacity-40" :title="ap.isSelected ? 'Deselect' : 'Select'">
               </td>

@@ -1,22 +1,40 @@
 import { computed } from 'vue'
 import { useSerialStore } from '../stores/serialStore'
 import { getCommandMeta, SEVERITY } from '../services/commandMeta'
+import { getPrereqState } from '../utils/actionDispatcher'
 
-export function useContextAction(serialStoreRef = null) {
+interface BtnState {
+  disabled: boolean
+  title: string
+  severity: string
+  isDestructive: boolean
+}
+
+interface CanRunResult {
+  ok: boolean
+  reason: string | null
+  severity?: string
+}
+
+export function useContextAction(serialStoreRef: any = null) {
   const serial = serialStoreRef || useSerialStore()
 
-  function isConnected() {
+  function isConnected(): boolean {
     return serial?.isConnected === true
   }
 
-  function canRun(cmd) {
+  function canRun(cmd: string): CanRunResult {
     if (!isConnected()) {
       return { ok: false, reason: 'Connect to device first', severity: SEVERITY.LOW }
+    }
+    const prereq = getPrereqState(cmd)
+    if (!prereq.ok) {
+      return { ok: false, reason: prereq.reason || 'Cannot run', severity: SEVERITY.MEDIUM }
     }
     return { ok: true, reason: null }
   }
 
-  function btnState(cmd, options = {}) {
+  function btnState(cmd: string, options: { title?: string } = {}): BtnState {
     if (!isConnected()) {
       return {
         disabled: true,
@@ -26,15 +44,16 @@ export function useContextAction(serialStoreRef = null) {
       }
     }
     const meta = getCommandMeta(cmd)
+    const prereq = getPrereqState(cmd)
     return {
-      disabled: false,
-      title: options.title || meta?.resultHint || `Run: ${cmd}`,
+      disabled: !prereq.ok,
+      title: !prereq.ok ? (prereq.reason || 'Cannot run') : (options.title || meta?.resultHint || `Run: ${cmd}`),
       severity: meta?.severity || SEVERITY.LOW,
       isDestructive: meta?.destructive === true
     }
   }
 
-  function btnClass(cmd, baseClass = 'btn-primary') {
+  function btnClass(cmd: string, baseClass: string = 'btn-primary'): string {
     const state = btnState(cmd)
     if (state.disabled) {
       return `${baseClass} opacity-40 cursor-not-allowed`

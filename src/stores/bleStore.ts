@@ -1,13 +1,20 @@
 import { defineStore } from 'pinia'
 import { shallowRef, triggerRef, computed, watch } from 'vue'
 import { debouncedSave, loadStore, clearPersistedStore } from '../utils/persist'
+import type { BLEDevice } from '../types'
 
 const PERSIST_KEY = 'bleDevices'
 
+interface BLEDeviceRecord extends BLEDevice {
+  channel?: number
+  services?: string[]
+  firstSeen: Date
+  packetCount: number
+}
+
 export const useBleStore = defineStore('ble', () => {
-  const devices = shallowRef(new Map())
-  let _cleanupTimer = null
-  const CLEANUP_INTERVAL_MS = 30000
+  const devices = shallowRef<Map<string, BLEDeviceRecord>>(new Map())
+  const MAX_BLE_DEVICES = 2000
 
   const sortedDevices = computed(() => {
     return Array.from(devices.value.values())
@@ -16,40 +23,25 @@ export const useBleStore = defineStore('ble', () => {
 
   const deviceCount = computed(() => devices.value.size)
 
-  function _cleanupOldDevices() {
-    const map = devices.value
-    const cutoff = Date.now() - CLEANUP_INTERVAL_MS
-    let changed = false
-    for (const [mac, d] of map.entries()) {
-      if (d.lastSeen.getTime() < cutoff) {
-        map.delete(mac)
-        changed = true
-      }
-    }
-    if (changed) triggerRef(devices)
-  }
-
-  function _scheduleCleanup() {
-    if (_cleanupTimer) {
-      clearTimeout(_cleanupTimer)
-    }
-    _cleanupTimer = setTimeout(() => {
-      _cleanupOldDevices()
-      _scheduleCleanup()
-    }, CLEANUP_INTERVAL_MS)
-  }
-
-  // Start cleanup timer on init
-  _scheduleCleanup()
-
-  function updateOrAddDevice(dev) {
+  function updateOrAddDevice(dev: Partial<BLEDeviceRecord> & { mac: string }) {
     const now = new Date()
     const map = devices.value
+    if (!map.has(dev.mac) && map.size >= MAX_BLE_DEVICES) {
+      let oldestKey = ''
+      let oldestTime = Date.now()
+      for (const [k, d] of map.entries()) {
+        if (d.lastSeen.getTime() < oldestTime) {
+          oldestTime = d.lastSeen.getTime()
+          oldestKey = k
+        }
+      }
+      if (oldestKey) map.delete(oldestKey)
+    }
     const existing = map.get(dev.mac)
     map.set(dev.mac, {
       mac: dev.mac,
       name: dev.name || existing?.name || 'Unknown',
-      rssi: dev.rssi ?? existing?.rssi,
+      rssi: dev.rssi ?? existing?.rssi ?? null,
       channel: dev.channel || existing?.channel,
       manufacturer: dev.manufacturer || existing?.manufacturer || '',
       services: dev.services || existing?.services || [],
@@ -63,10 +55,6 @@ export const useBleStore = defineStore('ble', () => {
 
   function clearDevices() {
     devices.value = new Map()
-    if (_cleanupTimer) {
-      clearTimeout(_cleanupTimer)
-      _cleanupTimer = null
-    }
     clearPersistedStore(PERSIST_KEY)
   }
 
@@ -77,7 +65,7 @@ export const useBleStore = defineStore('ble', () => {
   })
 
   watch(devices, (map) => {
-    const items = []
+    const items: Record<string, unknown>[] = []
     for (const [key, dev] of map.entries()) {
       items.push({ ...dev, mac: key })
     }
@@ -90,15 +78,15 @@ export const useBleStore = defineStore('ble', () => {
     const current = devices.value
     let changed = false
     for (const dev of saved) {
-      const key = dev.mac || dev.id
+      const key = (dev.mac || dev.id) as string
       if (!key) continue
       if (current.has(key)) continue
-      const restored = {
-        ...dev,
-        firstSeen: dev.firstSeen ? new Date(dev.firstSeen) : new Date(),
-        lastSeen: dev.lastSeen ? new Date(dev.lastSeen) : new Date()
+      const restored: BLEDeviceRecord = {
+        ...(dev as any),
+        firstSeen: dev.firstSeen ? new Date(dev.firstSeen as string) : new Date(),
+        lastSeen: dev.lastSeen ? new Date(dev.lastSeen as string) : new Date()
       }
-      delete restored.id
+      delete (restored as any).id
       current.set(key, restored)
       changed = true
     }

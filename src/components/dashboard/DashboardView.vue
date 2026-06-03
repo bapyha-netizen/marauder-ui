@@ -206,7 +206,7 @@
           </div>
           <div class="flex items-center space-x-2">
             <span class="text-[11px] text-slate-500">{{ actions.length }} action{{ actions.length === 1 ? '' : 's' }}</span>
-            <button @click="actions = []" v-if="actions.length"
+            <button @click="clearActions()" v-if="actions.length"
               class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors">Clear</button>
           </div>
         </div>
@@ -217,7 +217,7 @@
             <div class="text-[10px] text-slate-700 mt-1">Select a target and click an action to begin</div>
           </div>
           <div v-for="act in actions" :key="act.id"
-            :class="act.status === 'running' ? 'border-amber-500/50 bg-amber-500/5' : act.status === 'error' ? 'border-red-500/50 bg-red-500/5' : act.status === 'success' ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-slate-700/50 bg-slate-700/10'"
+            :class="act.status === 'running' ? 'border-amber-500/50 bg-amber-500/5' : act.status === 'error' ? 'border-red-500/50 bg-red-500/5' : act.status === 'ok' ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-slate-700/50 bg-slate-700/10'"
             class="border rounded-lg p-2 text-[11px]">
             <div class="flex items-center justify-between mb-1">
               <div class="flex items-center space-x-1.5 min-w-0 flex-1">
@@ -227,8 +227,8 @@
               </div>
               <div class="flex items-center space-x-2 flex-shrink-0">
                 <span class="text-[10px] text-slate-500">{{ fmtTimeHM(act.time) }}</span>
-                <span :class="act.status === 'running' ? 'text-amber-300' : act.status === 'error' ? 'text-red-300' : act.status === 'success' ? 'text-emerald-300' : 'text-slate-400'">
-                  {{ act.status === 'running' ? '⏳' : act.status === 'error' ? '✕' : act.status === 'success' ? '✓' : '·' }}
+                <span :class="act.status === 'running' ? 'text-amber-300' : act.status === 'error' ? 'text-red-300' : act.status === 'ok' ? 'text-emerald-300' : 'text-slate-400'">
+                  {{ act.status === 'running' ? '⏳' : act.status === 'error' ? '✕' : act.status === 'ok' ? '✓' : '·' }}
                 </span>
               </div>
             </div>
@@ -253,7 +253,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, reactive } from 'vue'
+import { ref, computed, watch, reactive } from 'vue'
 import { useSerialStore } from '../../stores/serialStore'
 import { useApStore } from '../../stores/apStore'
 import { useBleStore } from '../../stores/bleStore'
@@ -262,7 +262,7 @@ import { useProbeStore } from '../../stores/probeStore'
 import { signalClass, dotClass, fmtTimeRelative, fmtTimeHM } from '../../utils/format'
 import { useToast } from '../../utils/toast'
 import { copyToClipboard } from '../../utils/clipboard'
-import { runAction, actions as dispatcherActions, runningAction as dispatcherRunning } from '../../utils/actionDispatcher'
+import { runAction, actions as dispatcherActions, runningAction as dispatcherRunning, clearActions } from '../../utils/actionDispatcher'
 import { getCommandMeta, SEVERITY } from '../../services/commandMeta'
 import ConfirmDialog from '../ConfirmDialog.vue'
 import { SEVERITY_META } from '../../services/commandMeta'
@@ -349,12 +349,22 @@ const BLE_ACTIONS = [
   { key: 'flock',    label: 'Flock', icon: '📷', cmd: 'sniffbt -t flock', needsSelected: false },
   { key: 'meta',     label: 'Meta', icon: '🕶', cmd: 'sniffbt -t meta', needsSelected: false },
   { key: 'skim',     label: 'Skim', icon: '💳', cmd: 'sniffskim', needsSelected: false },
+  { key: 'speaker',  label: 'Speakers', icon: '🔊', cmd: 'sniffbt -t speaker', needsSelected: false },
+  { key: 'jbl',      label: 'JBL', icon: '🔊', cmd: 'sniffbt -t jbl', needsSelected: false },
+  { key: 'bose',     label: 'Bose', icon: '🔊', cmd: 'sniffbt -t bose', needsSelected: false },
+  { key: 'sony',     label: 'Sony', icon: '🔊', cmd: 'sniffbt -t sony', needsSelected: false },
+  { key: 'marshall', label: 'Marshall', icon: '🔊', cmd: 'sniffbt -t marshall', needsSelected: false },
   { key: 'sour',     label: 'Sour Apple', icon: '🍎', warning: true, cmd: 'blespam -t sourapple', needsSelected: false },
   { key: 'juice',    label: 'Apple Juice', icon: '🧃', warning: true, cmd: 'blespam -t applejuice', needsSelected: false },
   { key: 'google',   label: 'Google', icon: '🔔', warning: true, cmd: 'blespam -t google', needsSelected: false },
   { key: 'samsung',  label: 'Samsung', icon: '⌚', warning: true, cmd: 'blespam -t samsung', needsSelected: false },
   { key: 'windows',  label: 'Windows', icon: '🪟', warning: true, cmd: 'blespam -t windows', needsSelected: false },
   { key: 'spamall',  label: 'BT Spam All', icon: '📤', warning: true, cmd: 'blespam -t all', needsSelected: false },
+  { key: 'spkspam',  label: 'Spk Spam', icon: '🔊', warning: true, cmd: 'blespam -t speaker', needsSelected: false },
+  { key: 'jblspam',  label: 'JBL Spam', icon: '🔊', warning: true, cmd: 'blespam -t jbl', needsSelected: false },
+  { key: 'bosespam', label: 'Bose Spam', icon: '🔊', warning: true, cmd: 'blespam -t bose', needsSelected: false },
+  { key: 'sonyspam', label: 'Sony Spam', icon: '🔊', warning: true, cmd: 'blespam -t sony', needsSelected: false },
+  { key: 'mtlspam',  label: 'Mshall Spam', icon: '🔊', warning: true, cmd: 'blespam -t marshall', needsSelected: false },
   { key: 'listt',    label: 'List AirTags', icon: '📋', cmd: 'list -t', needsSelected: false }
 ]
 
@@ -474,6 +484,9 @@ const runActionLocal = async (action) => {
     })
     if (result?.needsConfirm) {
       showConfirmForAction(result)
+    }
+    if (action.key === 'select' && selectedAP.value?.index !== undefined) {
+      apStore.updateAP(selectedAP.value.index, { isSelected: !selectedAP.value.isSelected })
     }
   } catch (e) {
     if (e.code === 'PREREQ_FAILED') {

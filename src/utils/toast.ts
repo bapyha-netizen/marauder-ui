@@ -1,25 +1,32 @@
 import { ref } from 'vue'
 
-const toasts = ref([])
+interface Toast {
+  id: number
+  message: string
+  type: string
+  timerId?: ReturnType<typeof setTimeout>
+}
+
+const toasts = ref<Toast[]>([])
 let nextId = 0
-const _lastToast = new Map()
-const _lastToastOrder = []
+const _lastToast = new Map<string, number>()
+const _lastToastOrder: string[] = []
 const _MAX_TRACKED = 100
 
 export function useToast() {
-  function show(message, type = 'info', duration = 3000) {
+  function show(message: string, type: string = 'info', duration: number = 3000): number | undefined {
     const now = Date.now()
     const last = _lastToast.get(message) || 0
     if (now - last < 500) return
     _lastToast.set(message, now)
     _lastToastOrder.push(message)
     if (_lastToastOrder.length > _MAX_TRACKED) {
-      const evicted = _lastToastOrder.shift()
+      const evicted = _lastToastOrder.shift()!
       _lastToast.delete(evicted)
     }
 
     const id = ++nextId
-    const toast = { id, message, type }
+    const toast: Toast = { id, message, type }
     toasts.value.push(toast)
     if (toasts.value.length > 5) {
       const oldest = toasts.value.shift()
@@ -33,7 +40,7 @@ export function useToast() {
     return id
   }
 
-  function remove(id) {
+  function remove(id: number): void {
     const idx = toasts.value.findIndex(t => t.id === id)
     if (idx === -1) return
     const toast = toasts.value[idx]
@@ -44,7 +51,7 @@ export function useToast() {
   return { toasts, show, remove }
 }
 
-export function _resetToastState() {
+export function _resetToastState(): void {
   toasts.value.splice(0).forEach(t => {
     if (t.timerId) clearTimeout(t.timerId)
   })

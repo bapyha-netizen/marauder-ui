@@ -114,4 +114,7 @@ if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushPendingSaves()
   })
+  window.addEventListener('beforeunload', () => {
+    flushPendingSaves()
+  })
 }
