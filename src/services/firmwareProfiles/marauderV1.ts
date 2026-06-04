@@ -178,7 +178,7 @@ function parseBLESniff(line: string, ctx: ParserContext): boolean {
     } else {
       const name = rawName.trim()
       ctx.bleStore.updateOrAddDevice({
-        mac: `BLE:${name.toUpperCase()}:${Date.now()}`,
+        mac: `BLE:${name.toUpperCase()}`,
         rssi: Number(rssi),
         name,
         lastSeen: new Date()
