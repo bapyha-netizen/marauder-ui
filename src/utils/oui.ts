@@ -4,6 +4,8 @@ const _vendorCache = new Map<string, string>()
 const _MAC_RE = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/
 const _db: Record<string, string> = OUI_DATA ?? {}
 
+export { _vendorCache, _db }
+
 export function loadDB(): Promise<Record<string, string>> {
   return Promise.resolve(_db)
 }

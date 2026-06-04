@@ -33,7 +33,7 @@ function installFakeNavigatorSerial() {
     },
     getPorts: vi.fn().mockResolvedValue([]),
     _fireConnect(port) {
-      for (const fn of listeners.connect) fn({ port })
+      for (const fn of listeners.connect) fn({ detail: { port } })
     },
     _fireDisconnect() {
       for (const fn of listeners.disconnect) fn()
