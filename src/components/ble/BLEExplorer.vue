@@ -167,6 +167,7 @@ import { runAction, shouldConfirm } from '../../utils/actionDispatcher'
 import { getCommandMeta, SEVERITY } from '../../services/commandMeta'
 import { useContextAction } from '../../composables/useContextAction'
 import ConfirmDialog from '../ConfirmDialog.vue'
+import { t, tA } from '../../services/i18n'
 
 const serialStore = useSerialStore()
 const bleStore = useBleStore()
@@ -245,7 +246,7 @@ const filteredDevices = computed(() => {
   return list
 })
 
-const toastConnect = () => toastShow('Connect to ESP32 first', 'warning')
+const toastConnect = () => toastShow(t('common.connectFirst'), 'warning')
 
 const toggleSelect = (dev) => {
   if (isSelected(dev.mac)) {
@@ -272,19 +273,19 @@ const clearSelection = () => { selected.value = {} }
 const copyMac = async (dev) => {
   if (!dev.mac) return
   const ok = await copyToClipboard(dev.mac)
-  toastShow(ok ? `Copied: ${dev.mac}` : 'Copy failed', ok ? 'success' : 'error')
+  toastShow(ok ? t('bleExplorer.copied', { mac: dev.mac }) : t('common.copyFailed'), ok ? 'success' : 'error')
 }
 
 const copySelectedMacs = async () => {
   const macs = Object.keys(selected.value)
   if (!macs.length) return
   const ok = await copyToClipboard(macs.join('\n'))
-  toastShow(ok ? `Copied ${macs.length} MACs` : 'Copy failed', ok ? 'success' : 'error')
+  toastShow(ok ? t('bleExplorer.copiedMacs', { n: macs.length }) : t('common.copyFailed'), ok ? 'success' : 'error')
 }
 
 const runDispatched = async (cmd, label, target = '', opts = {}) => {
   if (!ctx.isConnected.value) {
-    toastShow('Connect to ESP32 first', 'warning')
+    toastShow(t('common.connectFirst'), 'warning')
     return
   }
   const payload = { cmd, label, icon: opts.icon || '▶', target, options: {} }
@@ -298,10 +299,10 @@ const runDispatched = async (cmd, label, target = '', opts = {}) => {
 const showConfirm = (payload) => {
   const meta = getCommandMeta(payload.cmd)
   confirmDialog.show = true
-  confirmDialog.title = `${payload.label} — подтвердите`
+  confirmDialog.title = t('confirm.title', { label: payload.label })
   confirmDialog.body = meta?.destructive
-    ? ['Команда деструктивна.', 'Устройство начнёт активную передачу в эфир.', 'Убедитесь в наличии разрешения.']
-    : ['Команда изменит состояние ESP32.', 'Продолжить?']
+    ? tA('confirm.bodyDestructive')
+    : tA('confirm.bodyNormal')
   confirmDialog.cmd = payload.cmd
   confirmDialog.target = payload.target
   confirmDialog.icon = meta?.destructive ? '⚠' : '?'
@@ -315,10 +316,10 @@ const executeAction = async (payload) => {
     await runAction({ ...payload, options: { confirm: false } })
     if (payload.cmd.startsWith('clearlist')) {
       bleStore.clearDevices()
-      toastShow('BLE list cleared', 'success')
+      toastShow(t('bleExplorer.cleared'), 'success')
     }
   } catch (e) {
-    toastShow(`Failed: ${e.message}`, 'error')
+    toastShow(t('common.failed', { msg: e.message }), 'error')
   }
 }
 
@@ -379,13 +380,13 @@ const runCommand = (cmd, label, opts = {}) => runDispatched(cmd, label, '', opts
 const handleClear = () => {
   if (bleStore.deviceCount === 0) return
   confirmDialog.show = true
-  confirmDialog.title = `Clear ${bleStore.deviceCount} BLE devices`
-  confirmDialog.body = ['This will remove all discovered BLE devices from the list.', 'Continue?']
+  confirmDialog.title = t('bleExplorer.clearTitle', { n: bleStore.deviceCount })
+  confirmDialog.body = tA('bleExplorer.clearBody')
   confirmDialog.cmd = ''
   confirmDialog.target = ''
   confirmDialog.icon = '🗑'
   confirmDialog.severity = SEVERITY.MEDIUM
-  confirmDialog.confirmLabel = `Clear ${bleStore.deviceCount} devices`
+  confirmDialog.confirmLabel = t('bleExplorer.clearConfirm', { n: bleStore.deviceCount })
   confirmDialog.pendingPayload = { __clear: true }
 }
 </script>

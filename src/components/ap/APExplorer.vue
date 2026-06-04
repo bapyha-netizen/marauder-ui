@@ -146,6 +146,7 @@ import { runAction, shouldConfirm } from '../../utils/actionDispatcher'
 import { getCommandMeta, SEVERITY } from '../../services/commandMeta'
 import { useContextAction } from '../../composables/useContextAction'
 import ConfirmDialog from '../ConfirmDialog.vue'
+import { t, tA } from '../../services/i18n'
 
 const serialStore = useSerialStore()
 const apStore = useApStore()
@@ -180,10 +181,10 @@ const toggleExpand = (bssid) => {
   expanded.value = s
 }
 
-const copyText = async (text, label = 'Text') => {
+const copyText = async (text, label = '') => {
   if (!text) return
   const ok = await copyToClipboard(text)
-  toastShow(ok ? `Copied ${label}: ${text}` : 'Copy failed', ok ? 'success' : 'error')
+  toastShow(ok ? t('apExplorer.copied', { label, text }) : t('common.copyFailed'), ok ? 'success' : 'error')
 }
 
 const copyBssid = async (ap) => copyText(ap.bssid, 'BSSID')
@@ -194,7 +195,7 @@ const copyAllBssids = async () => {
   if (all.length === 0) return
   const text = all.map(a => a.bssid).filter(Boolean).join('\n')
   const ok = await copyToClipboard(text)
-  toastShow(ok ? `Copied ${all.length} BSSIDs` : 'Copy failed', ok ? 'success' : 'error')
+  toastShow(ok ? t('apExplorer.copyAllBssids', { n: all.length }) : t('common.copyFailed'), ok ? 'success' : 'error')
 }
 
 const filteredAPs = computed(() => {
@@ -219,15 +220,28 @@ const filteredAPs = computed(() => {
   return list
 })
 
-const toastConnect = () => toastShow('Connect to ESP32 first', 'warning')
+const toastConnect = () => toastShow(t('common.connectFirst'), 'warning')
+
+const runDispatched = async (cmd, label, target = '', opts = {}) => {
+  if (!ctx.isConnected.value) {
+    toastShow(t('common.connectFirst'), 'warning')
+    return
+  }
+  const payload = { cmd, label, icon: opts.icon || '▶', target, options: {} }
+  if (shouldConfirm(cmd) || opts.destructive) {
+    showConfirm(payload)
+    return
+  }
+  await executeAction(payload)
+}
 
 const toggleSelect = async (ap) => {
   if (!ctx.isConnected.value) {
-    toastShow('Connect to ESP32 first', 'warning')
+    toastShow(t('common.connectFirst'), 'warning')
     return
   }
   if (ap.index === undefined || ap.index === null) {
-    toastShow('AP has no index — run "list -a" first', 'warning')
+    toastShow(t('apExplorer.noIndex'), 'warning')
     return
   }
   const prevSelected = ap.isSelected
@@ -242,61 +256,17 @@ const toggleSelect = async (ap) => {
     })
   } catch (e) {
     apStore.updateAP(ap.index, { isSelected: prevSelected })
-    toastShow(`Select failed: ${e.message}`, 'error')
+    toastShow(t('common.failed', { msg: e.message }), 'error')
   }
-}
-
-const allSelected = computed(() => {
-  const list = Array.from(apStore.accessPoints.values()).filter(ap => ap.index !== undefined)
-  return list.length > 0 && list.every(ap => ap.isSelected)
-})
-
-const toggleSelectAll = async () => {
-  if (!ctx.isConnected.value) {
-    toastShow('Connect to ESP32 first', 'warning')
-    return
-  }
-  if (!apStore.apCount) return
-  const newState = !allSelected.value
-  try {
-    await runAction({
-      cmd: 'select -a all',
-      label: newState ? 'Select all APs' : 'Deselect all APs',
-      icon: newState ? '☑' : '⊘',
-      target: '',
-      options: { confirm: false }
-    })
-    for (const ap of apStore.accessPoints.values()) {
-      if (ap.index !== undefined) {
-        apStore.updateAP(ap.index, { isSelected: newState })
-      }
-    }
-    toastShow(newState ? 'All APs selected' : 'All APs deselected', 'info')
-  } catch (e) {
-    toastShow(`Select all failed: ${e.message}`, 'error')
-  }
-}
-
-const runDispatched = async (cmd, label, target = '', opts = {}) => {
-  if (!ctx.isConnected.value) {
-    toastShow('Connect to ESP32 first', 'warning')
-    return
-  }
-  const payload = { cmd, label, icon: opts.icon || '▶', target, options: {} }
-  if (shouldConfirm(cmd) || opts.destructive) {
-    showConfirm(payload)
-    return
-  }
-  await executeAction(payload)
 }
 
 const showConfirm = (payload) => {
   const meta = getCommandMeta(payload.cmd)
   confirmDialog.show = true
-  confirmDialog.title = `${payload.label} — подтвердите`
+  confirmDialog.title = t('confirm.title', { label: payload.label })
   confirmDialog.body = meta?.destructive
-    ? ['Команда деструктивна для сетей рядом.', 'ESP32 начнёт активную передачу.', 'Убедитесь в наличии разрешения на тест.']
-    : ['Команда изменит состояние ESP32.', 'Продолжить?']
+    ? tA('confirm.bodyDestructive')
+    : tA('confirm.bodyNormal')
   confirmDialog.cmd = payload.cmd
   confirmDialog.target = payload.target
   confirmDialog.icon = meta?.destructive ? '⚠' : '?'
@@ -308,9 +278,9 @@ const showConfirm = (payload) => {
 const executeAction = async (payload) => {
   try {
     await runAction({ ...payload, options: { confirm: false } })
-    if (payload.cmd.startsWith('clearlist')) toastShow('AP list cleared', 'success')
+    if (payload.cmd.startsWith('clearlist')) toastShow(t('apExplorer.cleared'), 'success')
   } catch (e) {
-    toastShow(`Failed: ${e.message}`, 'error')
+    toastShow(t('common.failed', { msg: e.message }), 'error')
   }
 }
 

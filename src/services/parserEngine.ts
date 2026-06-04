@@ -21,33 +21,11 @@ PROFILE_PARSERS.set('marauderV1', {
 
 let _activeProfile: string = 'marauderV1'
 
-// Global profile management for cross-component communication
-if (typeof window !== 'undefined') {
-  window.__setActiveProfile = (profileName: string) => {
-    if (!PROFILE_PARSERS.has(profileName)) {
-      throw new Error(`Unknown firmware profile: ${profileName}`)
-    }
-    _activeProfile = profileName
-  }
-  
-  window.__registerProfile = (profile: FirmwareProfile) => {
-    PROFILE_PARSERS.set(profile.name, {
-      dispatch: profile.DISPATCH,
-      fallbackParsers: profile.FALLBACK_PARSERS,
-      reset: profile.resetState
-    })
-  }
-}
-
 export function setActiveProfile(profileName: string): void {
   if (!PROFILE_PARSERS.has(profileName)) {
     throw new Error(`Unknown firmware profile: ${profileName}`)
   }
   _activeProfile = profileName
-  // Notify global listeners
-  if (typeof window !== 'undefined' && window.__onProfileChange) {
-    window.__onProfileChange(profileName)
-  }
 }
 
 export function getActiveProfile(): string {

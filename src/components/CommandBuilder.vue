@@ -3,7 +3,7 @@
     <div class="flex flex-wrap gap-1.5 items-start">
       <template v-for="group in COMMAND_GROUPS" :key="group.name">
         <div class="flex flex-wrap gap-x-0.5 gap-y-0.5 items-baseline px-2 py-1.5 rounded-lg bg-slate-800/20">
-          <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mr-1 flex-shrink-0">{{ group.nameRu }}</span>
+          <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mr-1 flex-shrink-0">{{ cmdLang === 'ru' ? group.nameRu : group.name }}</span>
           <button v-for="cmd in group.commands" :key="cmd.command" @click="send(cmd)"
             @mouseenter="showTip($event, cmd)" @mouseleave="hideTip"
             :disabled="!cmdState(cmd).canRun"
@@ -19,11 +19,11 @@
       </template>
 
       <div class="flex items-center space-x-1 px-2 py-1.5">
-        <label for="custom-command" class="sr-only">Custom command</label>
+        <label for="custom-command" class="sr-only">{{ $t('commandBuilder.customCommand') }}</label>
         <input v-model="custom" @keyup.enter="sendCustom" id="custom-command"
           class="w-20 lg:w-28 px-2 py-1 text-xs bg-slate-800 rounded-lg border border-slate-600 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-          placeholder="e.g., scanall, list, set..." aria-label="Enter custom command like scanall, list, or set">
-        <button @click="sendCustom" class="btn-primary btn-sm" aria-label="Send custom command">→</button>
+          :placeholder="$t('commandBuilder.placeholder')" :aria-label="$t('commandBuilder.customCommand')">
+        <button @click="sendCustom" class="btn-primary btn-sm" :aria-label="$t('commandBuilder.send')">→</button>
       </div>
     </div>
 
@@ -39,7 +39,7 @@
             {{ cmdState(tooltipCmd).severity }}
           </span>
         </div>
-        <div class="text-xs leading-relaxed opacity-90">{{ tooltipCmd.ru }}</div>
+        <div class="text-xs leading-relaxed opacity-90">{{ cmdLang === 'ru' ? tooltipCmd.ru : (tooltipCmd.label || tooltipCmd.command) }}</div>
         <div class="mt-2 text-[11px] font-mono px-2 py-1 rounded inline-block opacity-60 bg-slate-800/50">{{ tooltipCmd.command }}</div>
         <div v-if="!cmdState(tooltipCmd).canRun" class="mt-2 text-[11px] px-2 py-1.5 rounded bg-red-500/20 text-red-200 border border-red-500/30">
           ⚠ {{ cmdState(tooltipCmd).tooltip }}
@@ -59,19 +59,21 @@
         tabindex="-1">
         <div class="bg-slate-800 rounded-xl border border-slate-700 p-5 max-w-sm w-full shadow-2xl">
           <h3 id="prompt-title" class="text-sm font-bold text-slate-100 mb-1 font-mono">{{ promptModal.command }}</h3>
-          <p id="prompt-description" class="text-xs text-slate-400 mb-4">Fill in the parameters below</p>
+          <p id="prompt-description" class="text-xs text-slate-400 mb-4">{{ $t('commandBuilder.fillParams') }}</p>
+          <div v-if="promptModal.isPassword" class="text-[10px] mb-3 px-2 py-1.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+            ⚠ {{ $t('commandBuilder.passwordWarning') }}
+          </div>
           <div class="space-y-3">
             <div v-for="(field, i) in promptModal.fields" :key="i">
               <label :for="`prompt-field-${i}`" class="text-xs text-slate-400 block mb-1">{{ field.label }}</label>
               <input :id="`prompt-field-${i}`" v-model="promptValues[i]" :placeholder="field.placeholder"
+                :type="field.type || 'text'"
                 class="input text-sm w-full font-mono" @keyup.enter="submitPrompt">
             </div>
           </div>
           <div class="flex gap-2 mt-5">
-            <button @click="cancelPrompt" @keyup.escape="cancelPrompt" class="btn-ghost flex-1 text-sm" aria-label="Cancel command" aria-describedby="cancel-help">Cancel</button>
-            <span id="cancel-help" class="sr-only">Press Escape or click to cancel command input</span>
-            <button @click="submitPrompt" class="btn-primary flex-1 text-sm" aria-label="Send command" aria-describedby="submit-help">Send</button>
-            <span id="submit-help" class="sr-only">Press Enter or click to send command with parameters</span>
+            <button @click="cancelPrompt" @keyup.escape="cancelPrompt" class="btn-ghost flex-1 text-sm" :aria-label="$t('commandBuilder.cancel')">{{ $t('commandBuilder.cancel') }}</button>
+            <button @click="submitPrompt" class="btn-primary flex-1 text-sm" :aria-label="$t('commandBuilder.send')">{{ $t('commandBuilder.send') }}</button>
           </div>
         </div>
       </div>
@@ -101,8 +103,10 @@ import { getCommandMeta, SEVERITY, SEVERITY_META } from '../services/commandMeta
 import { runAction, getPrereqState, shouldConfirm } from '../utils/actionDispatcher'
 import { sanitizeText } from '../utils/sanitize'
 import ConfirmDialog from './ConfirmDialog.vue'
+import { t, tA, locale } from '../services/i18n'
 
 const serialStore = useSerialStore()
+const cmdLang = locale
 const dashStore = useDashboardStore()
 const apStore = useApStore()
 const bleStore = useBleStore()
@@ -129,10 +133,10 @@ const confirmDialog = reactive({
 })
 
 const PROMPT_RULES = [
-  { re: /^select -a (\d+)$/, fields: [{ label: 'AP index (0-99)', placeholder: '0' }], build: (v) => 'select -a ' + v },
+  { re: /^select -a (\d+)$/, fields: [{ label: 'AP index (0-99)', placeholder: '0' }], build: (v) => 'select -a ' + v, isPassword: false },
   { re: /^select -a -f "contains (.+)"$/, fields: [{ label: 'Search text (partial SSID)', placeholder: 'Home' }], build: (v) => 'select -a -f "contains ' + v + '"' },
   { re: /^select -a -f "equals (.+)"$/, fields: [{ label: 'Exact SSID match', placeholder: 'MyWiFi' }], build: (v) => 'select -a -f "equals ' + v + '"' },
-  { re: /^join -a (\d+) -p "(.+)"$/, fields: [{ label: 'AP index (0-99)', placeholder: '0' }, { label: 'WiFi password', placeholder: 'Enter password...' }], build: (v1, v2) => 'join -a ' + v1 + ' -p "' + v2 + '"' },
+  { re: /^join -a (\d+) -p "(.+)"$/, fields: [{ label: 'AP index (0-99)', placeholder: '0' }, { label: 'WiFi password', placeholder: 'Enter password...', type: 'password' }], build: (v1, v2) => 'join -a ' + v1 + ' -p "' + v2 + '"', isPassword: true },
   { re: /^add -a -b ([0-9A-F:]+) -e "(.+)"$/i, fields: [{ label: 'BSSID (MAC)', placeholder: 'AA:BB:CC:DD:EE:FF' }, { label: 'SSID name', placeholder: 'Enter network name...' }], build: (m, s) => 'add -a -b ' + m + ' -e "' + s + '"' },
   { re: /^add -c -b ([0-9A-F:]+) -ap (\d+)$/i, fields: [{ label: 'BSSID (MAC)', placeholder: 'AA:BB:CC:DD:EE:FF' }, { label: 'AP index (0-99)', placeholder: '0' }], build: (m, i) => 'add -c -b ' + m + ' -ap ' + i },
   { re: /^ssid -a -n "(.+)"$/, fields: [{ label: 'New SSID name', placeholder: 'Enter network name...' }], build: (v) => 'ssid -a -n "' + v + '"' },
@@ -153,10 +157,10 @@ function cmdState(cmd) {
   const state = {
     canRun: prereq.ok && serialStore.isConnected,
     tooltip: !serialStore.isConnected
-      ? 'Connect to device first'
+      ? t('commandBuilder.connectFirst')
       : !prereq.ok
         ? prereq.reason
-        : prereq.hint || meta?.resultHint || 'Run command',
+        : prereq.hint || meta?.resultHint || t('commandBuilder.noOutput'),
     severity: meta?.severity || SEVERITY.INFO,
     badge: meta?.severity === SEVERITY.CRITICAL || meta?.destructive,
     badgeClass: meta?.destructive ? 'bg-red-500/30 text-red-200' : 'bg-orange-500/30 text-orange-200'
@@ -174,7 +178,7 @@ const resolveCommand = (cmd) => {
       const m = cmd.match(rule.re)
       if (m) {
         promptResolve = resolve
-        promptModal.value = { command: cmd, fields: rule.fields, build: rule.build }
+        promptModal.value = { command: cmd, fields: rule.fields, build: rule.build, isPassword: rule.isPassword }
         promptValues.value = rule.fields.map(() => '')
         return
       }
@@ -199,28 +203,22 @@ const submitPrompt = () => {
 const cancelPrompt = async () => {
   const { useToast } = await import('../utils/toast')
   const { show: toastShow } = useToast()
-  
   promptModal.value = null
   promptValues.value = []
   if (promptResolve) {
     promptResolve(null)
     promptResolve = null
-    // Show feedback that the action was cancelled
-    toastShow('Action cancelled', 'info', 2000)
+    toastShow(t('commandBuilder.actionCancelled'), 'info', 2000)
   }
 }
 
 const showConfirmForPayload = (payload) => {
   const meta = getCommandMeta(payload.cmd)
   confirmDialog.show = true
-  confirmDialog.title = `${payload.label} — подтвердите действие`
+  confirmDialog.title = t('confirm.title', { label: payload.label })
   confirmDialog.body = meta?.destructive
-    ? [
-        'Эта команда выполняет деструктивное действие на ESP32.',
-        'Устройство может перейти в режим передачи и будет видно в эфире.',
-        'Убедитесь, что у вас есть разрешение на тестирование этих сетей.'
-      ]
-    : ['Команда изменит состояние ESP32.', 'Продолжить?']
+    ? tA('confirm.bodyDestructive')
+    : tA('confirm.bodyNormal')
   confirmDialog.cmd = payload.cmd
   confirmDialog.target = payload.target
   confirmDialog.icon = meta?.destructive ? '⚠' : '?'
@@ -246,10 +244,11 @@ const executePayload = async (payload) => {
   } catch (e) {
     const { useToast } = await import('../utils/toast')
     const { show: toastShow } = useToast()
+    const hint = e.hint ? ' — ' + (typeof e.hint === 'string' && t(e.hint) !== e.hint ? t(e.hint) : e.hint) : ''
     if (e.code === 'PREREQ_FAILED') {
-      toastShow(`Cannot run: ${e.message}${e.hint ? ' — ' + e.hint : ''}`, 'error')
+      toastShow(t('common.failed', { msg: e.message }) + hint, 'error')
     } else {
-      toastShow(`Failed: ${e.message}`, 'error')
+      toastShow(t('common.failed', { msg: e.message }), 'error')
     }
   }
 }
@@ -258,7 +257,7 @@ const send = async (cmdObj) => {
   if (!serialStore.isConnected) {
     const { useToast } = await import('../utils/toast')
     const { show: toastShow } = useToast()
-    toastShow('Connect to ESP32 first', 'warning')
+    toastShow(t('commandBuilder.connectFirst'), 'warning')
     return
   }
   const resolved = await resolveCommand(cmdObj.command)
@@ -268,7 +267,8 @@ const send = async (cmdObj) => {
   if (!prereq.ok) {
     const { useToast } = await import('../utils/toast')
     const { show: toastShow } = useToast()
-    toastShow(`${prereq.reason}${prereq.hint ? ' — ' + prereq.hint : ''}`, 'error')
+    const hint = prereq.hint ? ' — ' + prereq.hint : ''
+    toastShow(prereq.reason + hint, 'error')
     return
   }
   const payload = { cmd: resolved, label: cmdObj.label, icon: cmdObj.icon, target: '' }

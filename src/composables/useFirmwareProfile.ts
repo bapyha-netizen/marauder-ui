@@ -1,14 +1,27 @@
 import { ref, computed, watch } from 'vue'
-import { setActiveProfile, getActiveProfile, registerProfile } from '../services/parserEngine'
+import { setActiveProfile as setParserProfile, registerProfile as registerParserProfile } from '../services/parserEngine'
 import type { FirmwareProfile } from '../types/parser'
 
-// AR-03: Firmware profile management composable
 const _profiles = new Map<string, FirmwareProfile>()
 const _activeProfileName = ref<string>('marauderV1')
 
-// Register default profiles
 import { marauderV1 } from '../services/firmwareProfiles/marauderV1'
 _profiles.set('marauderV1', marauderV1)
+
+function _switchParserProfile(name: string) {
+  try {
+    setParserProfile(name)
+  } catch {
+    // parser engine may not be initialized yet
+  }
+}
+
+// Register default profile with parser
+try {
+  registerParserProfile(marauderV1)
+} catch {
+  // parser engine may not be initialized yet
+}
 
 export function useFirmwareProfile() {
   const activeProfile = computed(() => _profiles.get(_activeProfileName.value))
@@ -18,25 +31,20 @@ export function useFirmwareProfile() {
       throw new Error(`Unknown firmware profile: ${profileName}`)
     }
     _activeProfileName.value = profileName
-    // Update the global parser profile
-    window.__setActiveProfile?.(profileName)
+    _switchParserProfile(profileName)
   }
 
   function registerProfile(profile: FirmwareProfile) {
     _profiles.set(profile.name, profile)
-    // Also register with the parser engine
-    window.__registerProfile?.(profile)
+    registerParserProfile(profile)
   }
 
   function getAvailableProfiles() {
     return Array.from(_profiles.keys())
   }
 
-  // Watch for profile changes and notify the parser engine
   watch(_activeProfileName, (newProfile) => {
-    if (window.__setActiveProfile) {
-      window.__setActiveProfile(newProfile)
-    }
+    _switchParserProfile(newProfile)
   }, { immediate: true })
 
   return {
@@ -46,10 +54,4 @@ export function useFirmwareProfile() {
     registerProfile,
     getAvailableProfiles
   }
-}
-
-// Initialize the global profile management
-if (typeof window !== 'undefined') {
-  window.__setActiveProfile = setActiveProfile
-  window.__registerProfile = registerProfile
 }

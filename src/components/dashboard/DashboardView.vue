@@ -6,30 +6,30 @@
         <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700/50 flex-shrink-0">
           <div class="flex items-center space-x-2">
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Live Output</h3>
+            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">{{ $t('dashboard.liveOutput') }}</h3>
           </div>
           <div class="flex items-center space-x-2">
-            <span class="text-[11px] text-slate-500">{{ serialStore.terminalOutput.length }} lines</span>
+            <span class="text-[11px] text-slate-500">{{ serialStore.terminalOutput.length }} {{ $t('dashboard.lines') }}</span>
             <button @click="paused = !paused"
               :class="paused ? 'bg-amber-600/50 text-amber-200' : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'"
               class="px-1.5 py-0.5 text-[10px] rounded-md transition-colors"
-              :title="paused ? 'Resume terminal output' : 'Pause terminal output'"
-              :aria-label="paused ? 'Resume terminal output' : 'Pause terminal output'">
-              {{ paused ? '▶ Resume' : '⏸ Pause' }}
+              :title="paused ? $t('dashboard.resume') : $t('dashboard.pause')"
+              :aria-label="paused ? $t('dashboard.resume') : $t('dashboard.pause')">
+              {{ paused ? $t('dashboard.resume') : $t('dashboard.pause') }}
             </button>
             <button @click="autoScroll = !autoScroll"
               :class="!autoScroll ? 'bg-amber-600/50 text-amber-200' : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'"
               class="px-1.5 py-0.5 text-[10px] rounded-md transition-colors"
-              :title="autoScroll ? 'Disable auto-scroll' : 'Enable auto-scroll'"
-              :aria-label="autoScroll ? 'Disable auto-scroll' : 'Enable auto-scroll'">
-              {{ autoScroll ? '⤓ Auto' : '⊘ Manual' }}
+              :title="autoScroll ? $t('dashboard.manual') : $t('dashboard.auto')"
+              :aria-label="autoScroll ? $t('dashboard.manual') : $t('dashboard.auto')">
+              {{ autoScroll ? $t('dashboard.auto') : $t('dashboard.manual') }}
             </button>
             <button @click="copyTerminal" v-if="serialStore.terminalOutput.length"
               class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors"
-              aria-label="Copy terminal output">Copy</button>
+              :aria-label="$t('dashboard.copy')">{{ $t('dashboard.copy') }}</button>
             <button @click="serialStore.clearOutput()"
               class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors"
-              aria-label="Clear terminal output">Clear</button>
+              :aria-label="$t('dashboard.clear')">{{ $t('dashboard.clear') }}</button>
           </div>
         </div>
         <div ref="liveRef" @scroll="onTerminalScroll"
@@ -43,9 +43,9 @@
           <div :style="{ height: spacerBottom + 'px' }"></div>
           <div v-if="!serialStore.terminalOutput.length" class="text-slate-600 text-center py-8">
             <div class="text-2xl mb-2">⚡</div>
-            <div class="mb-2">Waiting for data...</div>
+            <div class="mb-2">{{ $t('dashboard.waitingForData') }}</div>
             <div class="text-xs text-slate-500">
-              {{ serialStore.isConnected ? 'Device connected, data incoming...' : 'Connect device to start receiving data' }}
+              {{ serialStore.isConnected ? $t('dashboard.deviceConnected') : $t('dashboard.connectDevice') }}
             </div>
           </div>
         </div>
@@ -66,8 +66,8 @@
             </button>
           </div>
           <button @click="runScanForTab" class="px-2 py-1 text-[10px] font-medium rounded-md bg-emerald-600/30 text-emerald-200 hover:bg-emerald-600/50 border border-emerald-500/50 transition-colors"
-            :title="`Run scan for ${activeTabLabel}`">
-            ▶ Scan
+            :title="$t('dashboard.scan') + ' ' + activeTabLabel">
+            {{ $t('dashboard.scan') }}
           </button>
         </div>
         <div class="flex-1 overflow-y-auto p-2 scrollbar-thin">
@@ -75,8 +75,8 @@
           <template v-if="activeTab === 'ap'">
             <div v-if="!apStore.sortedAPs.length" class="text-center py-12 text-xs text-slate-600">
               <div class="text-2xl mb-2">📡</div>
-              <div>No APs yet</div>
-              <button @click="serialStore.scanAll()" class="mt-2 text-indigo-400 hover:text-indigo-300">Run scanall</button>
+              <div>{{ $t('dashboard.noAps') }}</div>
+              <button @click="serialStore.scanAll()" class="mt-2 text-indigo-400 hover:text-indigo-300">{{ $t('dashboard.apActions.listAps') }}</button>
             </div>
             <button v-for="ap in apStore.sortedAPs" :key="ap.bssid" @click="selectAP(ap)"
               :class="selectedAP?.bssid === ap.bssid ? 'bg-indigo-600/20 border-indigo-500/50' : 'bg-slate-700/20 border-transparent hover:bg-slate-700/40'"
@@ -98,8 +98,8 @@
           <template v-else-if="activeTab === 'ble'">
             <div v-if="!bleStore.sortedDevices.length" class="text-center py-12 text-xs text-slate-600">
               <div class="text-2xl mb-2">🔵</div>
-              <div>No BLE devices</div>
-              <button @click="serialStore.sendCommand('sniffbt')" class="mt-2 text-indigo-400 hover:text-indigo-300">Run sniffbt</button>
+              <div>{{ $t('dashboard.noBle') }}</div>
+              <button @click="serialStore.sendCommand('sniffbt')" class="mt-2 text-indigo-400 hover:text-indigo-300">{{ $t('dashboard.bleActions.sniffBle') }}</button>
             </div>
             <button v-for="dev in bleStore.sortedDevices" :key="dev.mac" @click="selectBLE(dev)"
               :class="selectedBLE?.mac === dev.mac ? 'bg-indigo-600/20 border-indigo-500/50' : 'bg-slate-700/20 border-transparent hover:bg-slate-700/40'"
@@ -121,8 +121,8 @@
           <template v-else-if="activeTab === 'probes'">
             <div v-if="!probeStore.probes.length" class="text-center py-12 text-xs text-slate-600">
               <div class="text-2xl mb-2">📱</div>
-              <div>No probes</div>
-              <button @click="serialStore.sendCommand('sniffprobe')" class="mt-2 text-indigo-400 hover:text-indigo-300">Run sniffprobe</button>
+              <div>{{ $t('dashboard.noProbes') }}</div>
+              <button @click="serialStore.sendCommand('sniffprobe')" class="mt-2 text-indigo-400 hover:text-indigo-300">{{ $t('dashboard.probeActions.sniffProbe') }}</button>
             </div>
             <div v-for="(p, i) in probeStore.probes" :key="i"
               class="p-2 mb-1 rounded-lg bg-slate-700/20 hover:bg-slate-700/40 transition-colors">
@@ -142,11 +142,11 @@
           <template v-else-if="activeTab === 'stations'">
             <div v-if="!selectedAP" class="text-center py-12 text-xs text-slate-600">
               <div class="text-2xl mb-2">📱</div>
-              <div>Select an AP first</div>
+              <div>{{ $t('dashboard.selectTargetFirst') }}</div>
             </div>
             <div v-else-if="!selectedAP.stations?.length" class="text-center py-12 text-xs text-slate-600">
               <div class="text-2xl mb-2">📭</div>
-              <div>No stations on {{ selectedAP.essid }}</div>
+              <div>{{ $t('dashboard.noStationsOn') }} {{ selectedAP.essid }}</div>
               <button @click="serialStore.sendCommand('sniffbeacon')" class="mt-2 text-indigo-400 hover:text-indigo-300">Run sniffbeacon</button>
             </div>
             <div v-for="sta in (selectedAP?.stations || [])" :key="sta.mac"
@@ -169,8 +169,8 @@
       <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-3 flex-shrink-0">
         <div v-if="!selectedTarget" class="text-center py-6 text-xs text-slate-600">
           <div class="text-2xl mb-2">🎯</div>
-          <div>Select a target from the list to see available actions</div>
-          <div class="mt-2 text-[10px] text-slate-700">or run a scan from the tab buttons above</div>
+          <div>{{ $t('dashboard.selectTarget') }}</div>
+          <div class="mt-2 text-[10px] text-slate-700">{{ $t('dashboard.runScan') }}</div>
         </div>
         <template v-else>
           <div class="flex items-start justify-between mb-2">
@@ -190,9 +190,9 @@
                 <span v-if="selectedTarget.vendor" class="px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400">{{ selectedTarget.vendor }}</span>
               </div>
             </div>
-            <button @click="clearSelection" class="text-slate-500 hover:text-slate-200 text-lg flex-shrink-0 ml-2" title="Clear selection" aria-label="Clear selection">✕</button>
+            <button @click="clearSelection" class="text-slate-500 hover:text-slate-200 text-lg flex-shrink-0 ml-2" :title="$t('dashboard.clearSelection')" :aria-label="$t('dashboard.clearSelection')">✕</button>
           </div>
-          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 mt-2">Actions</div>
+          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 mt-2">{{ $t('dashboard.actions') }}</div>
           <div class="flex flex-wrap gap-1.5">
             <button v-for="action in availableActions" :key="action.key" @click="runActionLocal(action)"
               :disabled="!actionState(action).canRun || !!actionRunning"
@@ -203,7 +203,7 @@
               <span v-else>{{ action.icon }}</span>
               <span>{{ action.label }}</span>
             </button>
-            <div v-if="!availableActions.length" class="text-[10px] text-slate-600">No actions for this target</div>
+            <div v-if="!availableActions.length" class="text-[10px] text-slate-600">{{ $t('dashboard.noActionsForTarget') }}</div>
           </div>
         </template>
       </div>
@@ -213,20 +213,19 @@
         <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700/50 flex-shrink-0">
           <div class="flex items-center space-x-2">
             <span class="w-2 h-2 rounded-full" :class="actionRunning ? 'bg-amber-400 animate-pulse' : 'bg-slate-600'"></span>
-            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Action Log</h3>
+            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">{{ $t('dashboard.actionLog') }}</h3>
             <span v-if="actionRunning" class="text-[10px] text-amber-300 font-medium">{{ actionRunning.label }}...</span>
           </div>
           <div class="flex items-center space-x-2">
-            <span class="text-[11px] text-slate-500">{{ actions.length }} action{{ actions.length === 1 ? '' : 's' }}</span>
+            <span class="text-[11px] text-slate-500">{{ actions.length }} {{ $t('dashboard.actionLog').toLowerCase() }}{{ actions.length === 1 ? '' : 's' }}</span>
             <button @click="clearActions()" v-if="actions.length"
-              class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors">Clear</button>
+              class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors">{{ $t('dashboard.clear') }}</button>
           </div>
         </div>
         <div ref="actionLogRef" class="flex-1 overflow-y-auto p-2 space-y-1.5 scrollbar-thin">
           <div v-if="!actions.length && !actionRunning" class="text-center py-8 text-xs text-slate-600">
             <div class="text-2xl mb-2">📋</div>
-            <div>No actions yet</div>
-            <div class="text-[10px] text-slate-700 mt-1">Select a target and click an action to begin</div>
+            <div>{{ $t('dashboard.noActionsYet') }}</div>
           </div>
           <div v-for="act in actions" :key="act.id"
             :class="act.status === 'running' ? 'border-amber-500/50 bg-amber-500/5' : act.status === 'error' ? 'border-red-500/50 bg-red-500/5' : act.status === 'ok' ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-slate-700/50 bg-slate-700/10'"
@@ -278,6 +277,7 @@ import { runAction, actions as dispatcherActions, runningAction as dispatcherRun
 import { getCommandMeta, SEVERITY } from '../../services/commandMeta'
 import ConfirmDialog from '../ConfirmDialog.vue'
 import { SEVERITY_META } from '../../services/commandMeta'
+import { t, tA } from '../../services/i18n'
 
 const { show: toastShow } = useToast()
 
@@ -315,10 +315,10 @@ const spacerTop = computed(() => visibleStart.value * TERMINAL_LINE_HEIGHT)
 const spacerBottom = computed(() => Math.max(0, (totalTerminalLines.value - visibleEnd.value) * TERMINAL_LINE_HEIGHT))
 
 const targetTabs = computed(() => [
-  { id: 'ap', label: 'APs', icon: '📶', count: apStore.apCount || 0, scanCmd: 'scanall' },
-  { id: 'ble', label: 'BLE', icon: '🔵', count: bleStore.deviceCount || 0, scanCmd: 'sniffbt' },
-  { id: 'probes', label: 'Probes', icon: '📱', count: probeStore.probeCount || 0, scanCmd: 'sniffprobe' },
-  { id: 'stations', label: 'Stations', icon: '👥', count: selectedAP.value?.stations?.length || 0, scanCmd: 'sniffbeacon' }
+  { id: 'ap', label: t('dashboard.tabAps'), icon: '📶', count: apStore.apCount || 0, scanCmd: 'scanall' },
+  { id: 'ble', label: t('dashboard.tabBle'), icon: '🔵', count: bleStore.deviceCount || 0, scanCmd: 'sniffbt' },
+  { id: 'probes', label: t('dashboard.tabProbes'), icon: '📱', count: probeStore.probeCount || 0, scanCmd: 'sniffprobe' },
+  { id: 'stations', label: t('dashboard.tabStations'), icon: '👥', count: selectedAP.value?.stations?.length || 0, scanCmd: 'sniffbeacon' }
 ])
 
 const activeTabLabel = computed(() => targetTabs.value.find(t => t.id === activeTab.value)?.label || '')
@@ -327,7 +327,7 @@ const runScanForTab = () => {
   const tab = targetTabs.value.find(t => t.id === activeTab.value)
   if (!tab) return
   if (!serialStore.isConnected) {
-    toastShow('Connect to ESP32 first', 'warning')
+    toastShow(t('common.connectFirst'), 'warning')
     return
   }
   runAction({
@@ -336,8 +336,9 @@ const runScanForTab = () => {
     icon: '▶',
     target: ''
   }).catch(e => {
+    const hint = e.hint ? ' — ' + e.hint : ''
     if (e.code === 'PREREQ_FAILED') {
-      toastShow(`${e.message}${e.hint ? ' — ' + e.hint : ''}`, 'error')
+      toastShow(t('dashboard.actionFailed', { msg: e.message }) + hint, 'error')
     }
   })
 }
@@ -454,10 +455,10 @@ const clearSelection = () => {
 
 const actionState = (action) => {
   if (!serialStore.isConnected) {
-    return { canRun: false, tooltip: 'Connect to device first' }
+    return { canRun: false, tooltip: t('common.connectFirst') }
   }
   if (action.needsSelected && !selectedAP.value?.isSelected && activeTab.value === 'ap') {
-    return { canRun: false, tooltip: 'Click "Select" first to mark this AP as target' }
+    return { canRun: false, tooltip: t('dashboard.apActions.select') + ' ' + t('commandBuilder.selectApsFirst') }
   }
   return { canRun: true, tooltip: action.title || action.label }
 }
@@ -469,18 +470,18 @@ const actionBtnClass = (action) => {
 
 const runActionLocal = async (action) => {
   if (!serialStore.isConnected) {
-    toastShow('Connect to ESP32 first', 'warning')
+    toastShow(t('common.connectFirst'), 'warning')
     return
   }
   let cmd = action.cmd
   if (typeof cmd === 'function') {
     if (!selectedTarget.value) {
-      toastShow('Select a target first', 'warning')
+      toastShow(t('dashboard.selectTargetFirst'), 'warning')
       return
     }
     cmd = cmd(selectedTarget.value.raw)
     if (!cmd) {
-      toastShow('Target has no index — list APs first', 'warning')
+      toastShow(t('dashboard.targetNoIndex'), 'warning')
       return
     }
   }
@@ -501,10 +502,11 @@ const runActionLocal = async (action) => {
       apStore.updateAP(selectedAP.value.index, { isSelected: !selectedAP.value.isSelected })
     }
   } catch (e) {
+    const hint = e.hint ? ' — ' + e.hint : ''
     if (e.code === 'PREREQ_FAILED') {
-      toastShow(`${e.message}${e.hint ? ' — ' + e.hint : ''}`, 'error')
+      toastShow(t('dashboard.actionFailed', { msg: e.message }) + hint, 'error')
     } else {
-      toastShow(`${action.label} failed: ${e.message}`, 'error')
+      toastShow(t('dashboard.actionFailed', { msg: action.label + ': ' + e.message }), 'error')
     }
   }
 }
@@ -524,10 +526,10 @@ const confirmDialog = reactive({
 const showConfirmForAction = (payload) => {
   const meta = getCommandMeta(payload.cmd)
   confirmDialog.show = true
-  confirmDialog.title = `${payload.label} — подтвердите`
+  confirmDialog.title = t('confirm.title', { label: payload.label })
   confirmDialog.body = meta?.destructive
-    ? ['Команда деструктивна для ESP32 и сетей рядом.', 'Убедитесь в наличии разрешения на тестирование.']
-    : ['Команда изменит состояние ESP32.', 'Продолжить?']
+    ? tA('confirm.bodyDestructive')
+    : tA('confirm.bodyNormal')
   confirmDialog.cmd = payload.cmd
   confirmDialog.target = payload.target
   confirmDialog.icon = meta?.destructive ? '⚠' : '?'
@@ -544,7 +546,7 @@ const onConfirmAction = async () => {
     try {
       await runAction({ ...payload, options: { confirm: false } })
     } catch (e) {
-      toastShow(`Failed: ${e.message}`, 'error')
+      toastShow(t('dashboard.actionFailed', { msg: e.message }), 'error')
     }
   }
 }
@@ -612,7 +614,7 @@ const copyTerminal = async () => {
     .join('\n')
   if (!text) return
   const ok = await copyToClipboard(text)
-  toastShow(ok ? `Copied ${serialStore.terminalOutput.length} lines` : 'Copy failed', ok ? 'success' : 'error')
+  toastShow(ok ? t('dashboard.copiedLines', { n: serialStore.terminalOutput.length }) : t('dashboard.copyFailed'), ok ? 'success' : 'error')
 }
 </script>
 

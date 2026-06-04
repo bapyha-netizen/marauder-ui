@@ -14,32 +14,36 @@
         <div class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
           :class="serialStore.isDemoMode ? 'bg-cyan-500/10 text-cyan-400' : serialStore.isConnected ? 'bg-emerald-500/10 text-emerald-400' : serialStore.reconnectAttempts > 0 ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'">
           <span class="w-1.5 h-1.5 rounded-full" :class="serialStore.isDemoMode ? 'bg-cyan-400' : serialStore.isConnected ? 'bg-emerald-400' : serialStore.reconnectAttempts > 0 ? 'bg-amber-400 animate-pulse' : 'bg-red-400'"></span>
-          {{ serialStore.isDemoMode ? 'Demo' : serialStore.isConnected ? 'Connected' : serialStore.reconnectAttempts > 0 ? `Reconnecting (${serialStore.reconnectAttempts})` : 'Disconnected' }}
+          {{ serialStore.isDemoMode ? $t('app.demo') : serialStore.isConnected ? $t('app.connected') : serialStore.reconnectAttempts > 0 ? $t('app.reconnecting') + ' (' + serialStore.reconnectAttempts + ')' : $t('app.disconnected') }}
         </div>
         <AppActionBar />
       </div>
       <div class="flex items-center space-x-2">
-        <label class="flex items-center space-x-1.5 text-[11px] text-slate-400 cursor-pointer" :title="serialStore.autoReconnect ? 'Auto-reconnect enabled' : 'Auto-reconnect disabled'">
+        <label class="flex items-center space-x-1.5 text-[11px] text-slate-400 cursor-pointer" :title="serialStore.autoReconnect ? $t('app.autoReconnectEnabled') : $t('app.autoReconnectDisabled')">
           <input type="checkbox" v-model="serialStore.autoReconnect" class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-indigo-600 focus:ring-indigo-500">
-          <span>Auto-reconnect</span>
+          <span>{{ $t('app.autoReconnect') }}</span>
         </label>
         <button v-if="!serialStore.isConnected" @click="toggleDemoMode"
           class="btn text-[11px]"
           :class="serialStore.isDemoMode ? 'btn-warning' : 'btn-ghost'">
-          {{ serialStore.isDemoMode ? 'Exit Demo' : 'Try Demo' }}
+          {{ serialStore.isDemoMode ? $t('app.exitDemo') : $t('app.tryDemo') }}
         </button>
           <button @click="handleEmergencyStop" v-if="serialStore.isConnected"
-            class="btn-emergency text-[11px]" title="Emergency stop all scans/attacks"
-            aria-label="Emergency stop all scans and attacks">
-            ■ Stop
+            class="btn-emergency text-[11px]" :title="$t('app.emergencyStop')"
+            :aria-label="$t('app.emergencyStop')">
+            {{ $t('app.stop') }}
           </button>
         <button @click="handleConnect" v-if="!serialStore.isConnected" class="btn-success text-[11px]"
-          aria-label="Connect to ESP32 device">
-          Connect
+          :aria-label="$t('app.connect')">
+          {{ $t('app.connect') }}
         </button>
         <button @click="handleDisconnect" v-if="serialStore.isConnected" class="btn-danger text-[11px]"
-          aria-label="Disconnect from ESP32 device">
-          Disconnect
+          :aria-label="$t('app.disconnect')">
+          {{ $t('app.disconnect') }}
+        </button>
+        <button @click="toggleLocale" class="btn-ghost text-[11px] px-2"
+          :title="locale === 'ru' ? 'Switch to English' : 'Переключить на русский'">
+          {{ locale === 'ru' ? 'EN' : 'RU' }}
         </button>
       </div>
     </header>
@@ -93,15 +97,15 @@
       <div class="flex items-center space-x-4">
         <span class="flex items-center space-x-1">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-          <span>Connected</span>
+          <span>{{ $t('app.connected') }}</span>
         </span>
-        <span>APs: <span class="text-slate-300 font-semibold">{{ apStore.apCount }}</span></span>
-        <span>BLE: <span class="text-slate-300 font-semibold">{{ bleStore.deviceCount }}</span></span>
-        <span>Probes: <span class="text-slate-300 font-semibold">{{ probeStore.probeCount }}</span></span>
-        <span>Pkts: <span class="text-slate-300 font-semibold">{{ dashStore.packetsCaptured }}</span></span>
+        <span>{{ $t('app.statusAps') }}: <span class="text-slate-300 font-semibold">{{ apStore.apCount }}</span></span>
+        <span>{{ $t('app.statusBle') }}: <span class="text-slate-300 font-semibold">{{ bleStore.deviceCount }}</span></span>
+        <span>{{ $t('app.statusProbes') }}: <span class="text-slate-300 font-semibold">{{ probeStore.probeCount }}</span></span>
+        <span>{{ $t('app.statusPkts') }}: <span class="text-slate-300 font-semibold">{{ dashStore.packetsCaptured }}</span></span>
       </div>
       <div class="flex items-center space-x-4">
-        <span>Session: <span class="text-slate-300">{{ dashStore.sessionDuration }}</span></span>
+        <span>{{ $t('app.statusSession') }}: <span class="text-slate-300">{{ dashStore.sessionDuration }}</span></span>
       </div>
     </div>
 
@@ -140,6 +144,7 @@ import { useProbeStore } from './stores/probeStore'
 import { parseLine, parseDemoAP, parseDemoBLE, startParser, stopParser } from './services/parserEngine'
 import { useToast } from './utils/toast'
 import { sanitizeText } from './utils/sanitize'
+import { locale, toggleLocale, t } from './services/i18n'
 
 const serialStore = useSerialStore()
 const apStore = useApStore()
@@ -186,12 +191,12 @@ const checkMobile = () => {
 }
 
 const tabs = computed(() => [
-  { id: 'dashboard', label: 'Dashboard', icon: '📊', badge: '' },
-  { id: 'ap', label: 'APs', icon: '📶', badge: apStore.apCount || '' },
-  { id: 'ble', label: 'BLE', icon: '🔵', badge: bleStore.deviceCount || '' },
-  { id: 'probes', label: 'Probes', icon: '📱', badge: probeStore.probeCount || '' },
-  { id: 'scenarios', label: 'Scenarios', icon: '⚡', badge: '' },
-  { id: 'help', label: 'Help', icon: '❓', badge: '' },
+  { id: 'dashboard', label: t('app.tabDashboard'), icon: '📊', badge: '' },
+  { id: 'ap', label: t('app.tabAps'), icon: '📶', badge: apStore.apCount || '' },
+  { id: 'ble', label: t('app.tabBle'), icon: '🔵', badge: bleStore.deviceCount || '' },
+  { id: 'probes', label: t('app.tabProbes'), icon: '📱', badge: probeStore.probeCount || '' },
+  { id: 'scenarios', label: t('app.tabScenarios'), icon: '⚡', badge: '' },
+  { id: 'help', label: t('app.tabHelp'), icon: '❓', badge: '' },
 ])
 
 const cycleTab = (direction) => {

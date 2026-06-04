@@ -2,11 +2,11 @@
   <div class="h-full flex flex-col">
     <div class="flex items-center justify-between mb-3 flex-shrink-0">
       <div class="flex items-center space-x-3">
-        <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Справка</h2>
-        <span class="text-[11px] text-slate-500">{{ totalCommands }} команд</span>
+        <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">{{ $t('help.title') }}</h2>
+        <span class="text-[11px] text-slate-500">{{ totalCommands }} {{ $t('help.commands') }}</span>
       </div>
       <div class="relative">
-        <input v-model="search" type="search" placeholder="Поиск команды..." aria-label="Поиск команды"
+        <input v-model="search" type="search" :placeholder="$t('help.search')" :aria-label="$t('help.search')"
           class="w-56 pl-7 pr-2 py-1.5 text-xs bg-slate-800 rounded-lg border border-slate-600 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors">
         <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs">🔍</span>
       </div>
@@ -18,7 +18,7 @@
         <div class="flex items-center justify-between px-4 py-2.5 bg-slate-800/50 border-b border-slate-700/50">
           <div class="flex items-center space-x-2">
             <span class="text-sm">{{ groupIcons[group.name] || '📋' }}</span>
-            <h3 class="text-sm font-bold text-slate-200">{{ group.nameRu }}</h3>
+            <h3 class="text-sm font-bold text-slate-200">{{ cmdLang === 'ru' ? group.nameRu : group.name }}</h3>
           </div>
           <span class="text-[10px] text-slate-500">{{ filteredCommands(group).length }} / {{ group.commands.length }}</span>
         </div>
@@ -38,17 +38,17 @@
                 </code>
                 <span v-if="cmd.warning" class="text-[10px] text-amber-500 font-medium" title="Может нарушить работу сети">⚠️</span>
               </div>
-              <p class="text-xs text-slate-400 leading-relaxed">{{ cmd.ru }}</p>
+                <p class="text-xs text-slate-400 leading-relaxed">{{ cmdLang === 'ru' ? cmd.ru : cmd.label }}</p>
             </div>
             <span class="flex-shrink-0 mt-1 text-[10px] text-indigo-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">Копировать</span>
           </div>
         </div>
-        <div v-else class="px-4 py-3 text-xs text-slate-600">Нет совпадений</div>
+        <div v-else class="px-4 py-3 text-xs text-slate-600">{{ $t('help.noMatches') }}</div>
       </div>
 
       <div v-if="!filteredGroups.length && search" class="text-center py-16">
-        <p class="text-slate-600 text-base">Команд не найдено</p>
-        <p class="text-slate-600 text-xs mt-1">Попробуйте другой запрос</p>
+        <p class="text-slate-600 text-base">{{ $t('help.noCommands') }}</p>
+        <p class="text-slate-600 text-xs mt-1">{{ $t('help.tryAnother') }}</p>
       </div>
 
       <!-- Workflows -->
@@ -56,7 +56,7 @@
         <div class="flex items-center justify-between px-4 py-2.5 bg-slate-800/50 border-b border-slate-700/50">
           <div class="flex items-center space-x-2">
             <span class="text-sm">⚡</span>
-            <h3 class="text-sm font-bold text-cyan-300">Сценарии</h3>
+            <h3 class="text-sm font-bold text-cyan-300">{{ $t('help.scenarios') }}</h3>
             <span class="text-[11px] text-slate-500">({{ workflows.length }})</span>
           </div>
         </div>
@@ -83,7 +83,7 @@
     <Teleport to="body">
       <div v-if="copied"
         class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2.5 rounded-xl shadow-2xl border text-sm font-medium bg-emerald-700/90 border-emerald-600 text-emerald-100 backdrop-blur-sm whitespace-nowrap">
-        ✓ Скопировано: <span class="font-mono">{{ copied }}</span>
+        {{ $t('help.copySuccess', { cmd: copied }) }}
       </div>
     </Teleport>
   </div>
@@ -92,8 +92,10 @@
 <script setup>
 import { ref, computed, onUnmounted } from 'vue'
 import { COMMAND_GROUPS, WORKFLOWS } from '../../services/commandRegistry'
+import { locale } from '../../services/i18n'
 
 const search = ref('')
+const cmdLang = locale
 const copied = ref(null)
 let copyTimer = null
 
@@ -113,7 +115,7 @@ function filteredCommands(group) {
   const q = search.value.toLowerCase()
   return group.commands.filter(c =>
     c.command.toLowerCase().includes(q) ||
-    c.ru.toLowerCase().includes(q) ||
+    (c.ru || '').toLowerCase().includes(q) ||
     c.label.toLowerCase().includes(q)
   )
 }

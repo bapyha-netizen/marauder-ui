@@ -7,11 +7,11 @@
     aria-describedby="mobile-blocker-desc">
     <div class="bg-slate-800 rounded-2xl border border-slate-700 p-8 max-w-sm w-full text-center">
       <div class="text-3xl mb-4" aria-hidden="true">💻</div>
-      <h1 id="mobile-blocker-title" tabindex="-1" ref="headingRef" class="text-lg font-bold text-slate-100 mb-3">Desktop Only</h1>
+      <h1 id="mobile-blocker-title" tabindex="-1" ref="headingRef" class="text-lg font-bold text-slate-100 mb-3">{{ $t('mobileBlocker.title') }}</h1>
       <p id="mobile-blocker-desc" class="text-sm text-slate-400 mb-4 leading-relaxed">
-        This application requires Web Serial API — available only on desktop Chrome or Edge.
+        {{ $t('mobileBlocker.description') }}
       </p>
-      <p class="text-xs text-slate-500">Open from a desktop browser.</p>
+      <p class="text-xs text-slate-500">{{ $t('mobileBlocker.hint') }}</p>
     </div>
   </div>
 </template>

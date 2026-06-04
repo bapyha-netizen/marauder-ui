@@ -1,6 +1,6 @@
 <template>
   <div class="h-full flex flex-col">
-    <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Scenarios</h2>
+    <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">{{ $t('workflows.title') }}</h2>
 
     <div class="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -14,7 +14,7 @@
                 <h3 class="text-sm font-semibold text-slate-200">{{ wf.name }}</h3>
                 <span v-if="wf.warning" class="badge-amber text-[9px]">⚠ attack</span>
               </div>
-              <p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{{ wf.ru }}</p>
+              <p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{{ cmdLang === 'ru' ? wf.ru : wf.description }}</p>
               <div class="mt-2 flex flex-wrap gap-1">
                 <span v-for="(step, i) in wf.steps" :key="i" class="tag text-[9px]">
                   {{ step.command.split(' ')[0] }}
@@ -36,7 +36,7 @@
               <span class="text-2xl">{{ selectedWorkflow.icon || '📋' }}</span>
               <div>
                 <h2 class="text-lg font-bold text-slate-100">{{ selectedWorkflow.name }}</h2>
-                <p class="text-xs text-slate-400 mt-0.5">{{ selectedWorkflow.ru }}</p>
+                <p class="text-xs text-slate-400 mt-0.5">{{ cmdLang === 'ru' ? selectedWorkflow.ru : selectedWorkflow.description }}</p>
               </div>
             </div>
             <button @click="closeWorkflow" class="btn-ghost btn-icon text-lg hover:bg-slate-700/50 rounded-lg p-1.5">✕</button>
@@ -68,7 +68,7 @@
             <!-- Progress bar -->
             <div v-if="isRunning" class="bg-slate-900/50 rounded-xl border border-slate-700/50 p-3">
               <div class="flex items-center justify-between mb-2">
-                <span class="text-[11px] font-medium text-slate-400">Step {{ currentStep + 1 }} of {{ selectedWorkflow.steps.length }}</span>
+                <span class="text-[11px] font-medium text-slate-400">{{ $t('workflows.step') }} {{ currentStep + 1 }} {{ $t('workflows.of') }} {{ selectedWorkflow.steps.length }}</span>
                 <span class="text-[11px] font-mono text-slate-500">{{ duration }}</span>
               </div>
               <div class="w-full bg-slate-800 rounded-full h-1.5">
@@ -79,7 +79,7 @@
 
             <!-- Execution log -->
             <div v-if="execLog.length" class="bg-slate-900/50 rounded-xl border border-slate-700/50 p-3">
-              <h4 class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Execution Log</h4>
+              <h4 class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">{{ $t('workflows.executionLog') }}</h4>
               <div class="space-y-1 max-h-40 overflow-y-auto scrollbar-thin">
                 <div v-for="(entry, i) in execLog" :key="i" class="flex items-start space-x-2 text-[11px] font-mono">
                   <span class="text-slate-600 flex-shrink-0 w-14">{{ entry.time }}</span>
@@ -93,28 +93,28 @@
             <div v-if="completed" class="bg-emerald-500/10 border border-emerald-700/30 rounded-xl p-4">
               <div class="flex items-center space-x-2 mb-3">
                 <span class="text-emerald-400 text-lg">✓</span>
-                <span class="text-sm font-semibold text-emerald-300">Completed — {{ duration }}</span>
+                <span class="text-sm font-semibold text-emerald-300">{{ $t('workflows.completed') }} — {{ duration }}</span>
               </div>
               <div class="grid grid-cols-3 gap-2 text-center">
                 <div @click="goToTab('ap')" class="bg-slate-900/50 rounded-lg p-2 cursor-pointer hover:bg-slate-800/50 transition-colors">
                   <div class="text-lg font-bold text-indigo-400">{{ results.aps }}</div>
-                  <div class="text-[10px] text-slate-500">APs found →</div>
+                  <div class="text-[10px] text-slate-500">{{ $t('workflows.apsFound') }}</div>
                 </div>
                 <div @click="goToTab('ap')" class="bg-slate-900/50 rounded-lg p-2 cursor-pointer hover:bg-slate-800/50 transition-colors">
                   <div class="text-lg font-bold text-cyan-400">{{ results.stations }}</div>
-                  <div class="text-[10px] text-slate-500">Stations →</div>
+                  <div class="text-[10px] text-slate-500">{{ $t('workflows.stations') }}</div>
                 </div>
                 <div @click="goToTab('ble')" class="bg-slate-900/50 rounded-lg p-2 cursor-pointer hover:bg-slate-800/50 transition-colors">
                   <div class="text-lg font-bold text-emerald-400">{{ results.ble }}</div>
-                  <div class="text-[10px] text-slate-500">BLE devices →</div>
+                  <div class="text-[10px] text-slate-500">{{ $t('workflows.bleDevices') }}</div>
                 </div>
               </div>
               <div v-if="results.packets" class="mt-2 bg-slate-900/50 rounded-lg p-2 text-center">
                 <span class="text-xs font-bold text-amber-400">{{ results.packets }}</span>
-                <span class="text-[10px] text-slate-500 ml-1">packets captured</span>
+                <span class="text-[10px] text-slate-500 ml-1">{{ $t('workflows.packetsCaptured') }}</span>
               </div>
               <div class="mt-2 text-center">
-                <button @click="goToTab('dashboard')" class="btn-ghost btn-sm text-[10px]">View in Dashboard →</button>
+                <button @click="goToTab('dashboard')" class="btn-ghost btn-sm text-[10px]">{{ $t('workflows.viewInDashboard') }}</button>
               </div>
             </div>
           </div>
@@ -122,12 +122,12 @@
           <!-- Footer -->
           <div class="flex items-center justify-between pt-4 border-t border-slate-700/50">
             <div v-if="selectedWorkflow.warning" class="text-[11px] text-amber-400 font-medium">
-              ⚠ Use only on authorized networks
+              {{ $t('workflows.onlyAuthorized') }}
             </div>
             <div class="flex space-x-3 ml-auto">
-              <button @click="closeWorkflow" class="btn-ghost">{{ completed || aborted ? 'Close' : 'Stop' }}</button>
-              <button v-if="!isRunning && !completed" @click="executeWorkflow" class="btn-primary">Execute</button>
-              <button v-if="completed" @click="closeWorkflow" class="btn-primary">Done</button>
+              <button @click="closeWorkflow" class="btn-ghost">{{ completed || aborted ? $t('workflows.close') : $t('workflows.stop') }}</button>
+              <button v-if="!isRunning && !completed" @click="executeWorkflow" class="btn-primary">{{ $t('workflows.execute') }}</button>
+              <button v-if="completed" @click="closeWorkflow" class="btn-primary">{{ $t('workflows.done') }}</button>
             </div>
           </div>
         </div>
@@ -143,8 +143,10 @@ import { useApStore } from '../../stores/apStore'
 import { useBleStore } from '../../stores/bleStore'
 import { useDashboardStore } from '../../stores/dashboardStore'
 import { WORKFLOWS } from '../../services/commandRegistry'
+import { t, locale } from '../../services/i18n'
 
 const emit = defineEmits(['navigate'])
+const cmdLang = locale
 
 const serialStore = useSerialStore()
 const apStore = useApStore()
@@ -284,7 +286,7 @@ const executeWorkflow = async () => {
   durationTick.value = 0
   _durationInterval = setInterval(() => { durationTick.value++ }, 1000)
   execLog.value = []
-  addLog(`Starting "${wf.name}" — ${wf.steps.length} steps`, '▶', 'text-cyan-400')
+  addLog(t('workflows.starting', { name: wf.name, n: wf.steps.length }), '▶', 'text-cyan-400')
 
   beforeSnapshot.value = {
     aps: apStore.apCount,
@@ -298,13 +300,13 @@ const executeWorkflow = async () => {
   try {
     for (let i = 0; i < wf.steps.length; i++) {
       if (aborted.value) {
-        addLog(`Aborted at step ${i + 1}`, '✕', 'text-red-400')
+        addLog(t('workflows.aborted', { n: i + 1 }), '✕', 'text-red-400')
         break
       }
       currentStep.value = i
       const step = wf.steps[i]
       let cmd = step.command
-      addLog(`Step ${i + 1}: ${step.desc}`, '→', 'text-indigo-400')
+      addLog(t('workflows.step') + ' ' + (i + 1) + ': ' + step.desc, '→', 'text-indigo-400')
 
       if (step.stopManual) hasStopManual = true
 
@@ -321,11 +323,11 @@ const executeWorkflow = async () => {
         }
         indices.sort((a, b) => a - b)
         if (!indices.length) {
-          addLog(`No APs in list, skipping`, '◷', 'text-amber-400')
+          addLog(t('workflows.noAps'), '◷', 'text-amber-400')
           continue
         }
         const total = indices.length
-        addLog(`Running for ${total} APs`, '→', 'text-indigo-400')
+        addLog(t('workflows.runningFor', { n: total }), '→', 'text-indigo-400')
         for (let j = 0; j < total; j++) {
           if (aborted.value) break
           const idx = indices[j]
@@ -335,13 +337,13 @@ const executeWorkflow = async () => {
             dashStore.incrementCommands()
             addLog(`[${j + 1}/${total}] idx ${idx}: ${subCmd}`, '⚡', 'text-yellow-400')
           } catch (e) {
-            addLog(`Step ${i + 1} failed: ${e.message}`, '✕', 'text-red-400')
+            addLog(t('workflows.failed', { n: i + 1, msg: e.message }), '✕', 'text-red-400')
             aborted.value = true
             break
           }
         }
         if (!aborted.value) {
-          addLog(`Done`, '✓', 'text-emerald-400')
+          addLog(t('workflows.stepDone'), '✓', 'text-emerald-400')
         }
         continue
       }
@@ -349,7 +351,7 @@ const executeWorkflow = async () => {
       if (step.requiresInput) {
         const input = stepInputs.value[i]
         if (!input) {
-          addLog(`Waiting for input: ${step.label}`, '◷', 'text-amber-400')
+          addLog(t('workflows.waitingInput', { label: step.label }), '◷', 'text-amber-400')
           const waited = await waitForInput(i)
           if (aborted.value) break
           stepInputs.value[i] = waited
@@ -357,7 +359,7 @@ const executeWorkflow = async () => {
         const rawInput = stepInputs.value[i] || ''
 
         if (!cmd.includes('{input}')) {
-          addLog(`Warning: command doesn't support input substitution`, '⚠', 'text-amber-400')
+          addLog(t('workflows.warningNoSubst'), '⚠', 'text-amber-400')
         }
 
         if (step.splitInput) {
@@ -368,26 +370,26 @@ const executeWorkflow = async () => {
             .filter(s => /^\d+$/.test(s))
 
           if (items.length === 0) {
-            addLog(`Invalid input: only numbers allowed`, '⚠', 'text-amber-400')
+            addLog(t('workflows.invalidInput'), '⚠', 'text-amber-400')
             continue
           }
 
-          addLog(`Input: ${items.length} values`, '✓', 'text-emerald-400')
+          addLog(t('workflows.inputReceived', { input: items.length + ' ' + t('workflows.step').toLowerCase() + '(s)' }), '✓', 'text-emerald-400')
           for (const item of items) {
             if (aborted.value) break
             const subCmd = cmd.replaceAll('{input}', item)
             try {
               await serialStore.sendAndWait(subCmd, 5000)
               dashStore.incrementCommands()
-              addLog(`Sent: ${subCmd}`, '⚡', 'text-yellow-400')
+              addLog(t('workflows.sent', { cmd: subCmd }), '⚡', 'text-yellow-400')
             } catch (e) {
-              addLog(`Step ${i + 1} failed: ${e.message}`, '✕', 'text-red-400')
+              addLog(t('workflows.failed', { n: i + 1, msg: e.message }), '✕', 'text-red-400')
               aborted.value = true
               break
             }
           }
           if (step.delay && !aborted.value) {
-            addLog(`Waiting ${step.delay / 1000}s...`, '◷', 'text-slate-400')
+            addLog(t('workflows.waiting', { n: step.delay / 1000 }), '◷', 'text-slate-400')
             await new Promise(r => setTimeout(r, step.delay))
           }
           continue
@@ -395,35 +397,35 @@ const executeWorkflow = async () => {
 
         const sanitizedInput = rawInput.replace(/[;&|`$]/g, '')
         cmd = cmd.replaceAll('{input}', sanitizedInput)
-        addLog(`Input received: ${sanitizedInput}`, '✓', 'text-emerald-400')
+          addLog(t('workflows.inputReceived', { input: sanitizedInput }), '✓', 'text-emerald-400')
       }
 
       try {
         await serialStore.sendAndWait(cmd, step.delay ? step.delay + 5000 : 15000)
         dashStore.incrementCommands()
-        addLog(`Sent: ${cmd}`, '⚡', 'text-yellow-400')
+        addLog(t('workflows.sent', { cmd }), '⚡', 'text-yellow-400')
         if (step.delay && !step.stopManual) {
-          addLog(`Waiting ${step.delay / 1000}s...`, '◷', 'text-slate-400')
+          addLog(t('workflows.waiting', { n: step.delay / 1000 }), '◷', 'text-slate-400')
           await new Promise(r => setTimeout(r, step.delay))
         }
-        addLog(`Done`, '✓', 'text-emerald-400')
+        addLog(t('workflows.stepDone'), '✓', 'text-emerald-400')
       } catch (e) {
-        addLog(`Step ${i + 1} failed: ${e.message}`, '✕', 'text-red-400')
+        addLog(t('workflows.failed', { n: i + 1, msg: e.message }), '✕', 'text-red-400')
         aborted.value = true
         break
       }
     }
   } catch (e) {
-    addLog(`Workflow crashed: ${e.message}`, '✕', 'text-red-400')
+    addLog(t('workflows.crashed', { msg: e.message }), '✕', 'text-red-400')
   }
 
   if (!hasStopManual) {
     try {
       await serialStore.sendAndWait('stopscan', 5000)
-      addLog('Sent: stopscan (cleanup)', '⏹', 'text-slate-400')
+      addLog(t('workflows.sent', { cmd: 'stopscan (cleanup)' }), '⏹', 'text-slate-400')
     } catch (_) { }
   } else {
-    addLog('Attack running — use Stop button to halt', '⏹', 'text-amber-400')
+    addLog(t('workflows.attackRunning'), '⏹', 'text-amber-400')
   }
 
   if (_durationInterval) { clearInterval(_durationInterval); _durationInterval = null }
@@ -431,9 +433,9 @@ const executeWorkflow = async () => {
   if (!aborted.value) {
     completed.value = true
     cachedResults.value = computeResults()
-    addLog(`Completed ${wf.steps.length} steps in ${duration.value}`, '✓', 'text-emerald-400')
+    addLog(t('workflows.completedSteps', { n: wf.steps.length, duration: duration.value }), '✓', 'text-emerald-400')
   } else {
-    addLog(`Stopped`, '✕', 'text-red-400')
+    addLog(t('workflows.stopped'), '✕', 'text-red-400')
   }
   isRunning.value = false
   currentStep.value = -1

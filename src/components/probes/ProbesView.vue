@@ -86,6 +86,7 @@ import { runAction, shouldConfirm } from '../../utils/actionDispatcher'
 import { getCommandMeta, SEVERITY } from '../../services/commandMeta'
 import { useContextAction } from '../../composables/useContextAction'
 import ConfirmDialog from '../ConfirmDialog.vue'
+import { t, tA } from '../../services/i18n'
 
 const serialStore = useSerialStore()
 const probeStore = useProbeStore()
@@ -117,17 +118,17 @@ const filteredProbes = computed(() => {
   return list
 })
 
-const toastConnect = () => toastShow('Connect to ESP32 first', 'warning')
+const toastConnect = () => toastShow(t('common.connectFirst'), 'warning')
 
 const copyMac = async (p) => {
   if (!p.clientMac) return
   const ok = await copyToClipboard(p.clientMac)
-  toastShow(ok ? `Copied: ${p.clientMac}` : 'Copy failed', ok ? 'success' : 'error')
+  toastShow(ok ? t('probesExplorer.copied', { mac: p.clientMac }) : t('common.copyFailed'), ok ? 'success' : 'error')
 }
 
 const runDispatched = async (cmd, label, target = '') => {
   if (!ctx.isConnected.value) {
-    toastShow('Connect to ESP32 first', 'warning')
+    toastShow(t('common.connectFirst'), 'warning')
     return
   }
   const payload = { cmd, label, icon: '▶', target, options: {} }
@@ -141,10 +142,10 @@ const runDispatched = async (cmd, label, target = '') => {
 const showConfirm = (payload) => {
   const meta = getCommandMeta(payload.cmd)
   confirmDialog.show = true
-  confirmDialog.title = `${payload.label} — подтвердите`
+  confirmDialog.title = t('confirm.title', { label: payload.label })
   confirmDialog.body = meta?.destructive
-    ? ['Команда деструктивна.', 'Убедитесь в наличии разрешения.']
-    : ['Команда изменит состояние ESP32.', 'Продолжить?']
+    ? tA('confirm.bodyDestructive')
+    : tA('confirm.bodyNormal')
   confirmDialog.cmd = payload.cmd
   confirmDialog.target = payload.target
   confirmDialog.icon = meta?.destructive ? '⚠' : '?'
@@ -158,10 +159,10 @@ const executeAction = async (payload) => {
     await runAction({ ...payload, options: { confirm: false } })
     if (payload.cmd.startsWith('clearlist')) {
       probeStore.clearProbes()
-      toastShow('Probe list cleared', 'success')
+      toastShow(t('probesExplorer.cleared'), 'success')
     }
   } catch (e) {
-    toastShow(`Failed: ${e.message}`, 'error')
+    toastShow(t('common.failed', { msg: e.message }), 'error')
   }
 }
 
