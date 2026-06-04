@@ -1,6 +1,6 @@
 # Marauder UI — документация
 
-**Версия:** 0.5.3 (build 2026-06-04) - Enhanced Edition
+**Версия:** 0.6.0 (build 2026-06-04) - i18n & Security
 **Прошивка:** [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko
 **Назначение:** Desktop/web UI для управления ESP32 с прошивкой Marauder через Web Serial API
 
@@ -43,7 +43,8 @@ Marauder UI — графический интерфейс для **ESP32 Maraude
 - 🔌 **Demo-режим** — работа без ESP32 для ознакомления
 - 🆘 **Emergency Stop** — кнопка немедленной остановки в хедере
 - ⚡ **Производительность** — 10-100x оптимизации для потокового режима (1000 строк/сек)
-- 🔒 **Безопасность** — USB vendor whitelist, beforeunload persistence, memory bounds, ARIA labels
+- 🌐 **i18n** — переключение русского/английского языка интерфейса (кнопка EN/RU в хедере)
+- 🔒 **Безопасность** — USB vendor whitelist, beforeunload persistence, memory bounds, ARIA labels, HTML-фильтрация XSS
 
 ---
 
@@ -79,7 +80,11 @@ src/
 │   ├── bleStore.ts              # BLE-устройства
 │   ├── dashboardStore.ts        # Статистика, события, парсинг станций
 │   └── probeStore.ts            # Probe-запросы
+├── i18n/                        # Переводы (TypeScript)
+│   ├── en.ts                    # Английский
+│   └── ru.ts                    # Русский
 ├── services/                    # Business logic (TypeScript)
+│   ├── i18n.ts                  # i18n: t(), tA(), locale, setLocale
 │   ├── parserEngine.ts          # Парсер-диспетчер → firmware profile
 │   ├── firmwareProfiles/
 │   │   ├── marauderV1.ts        # Парсеры для текущей прошивки
@@ -97,6 +102,9 @@ src/
 │   ├── workflow/                # WorkflowBuilder (сценарии)
 │   ├── help/                    # HelpGuide (справка с поиском)
 │   └── ConfirmDialog.vue        # Диалог подтверждения
+├── composables/
+│   └── useContextAction.ts      # Композабл для действий над AP/BLE
+│   └── useConfirmDialog.ts      # Композабл для диалога подтверждения
 ├── utils/                       # Утилиты (TypeScript)
 │   ├── sanitize.ts              # sanitizeText, sanitizeAscii, normalizeMac, safeParseInt
 │   ├── uuid.ts                  # UUID v4 + recordKey для IndexedDB
@@ -130,18 +138,18 @@ src/
 ## Быстрый старт
 
 ```bash
-git clone https://github.com/anomalyco/marauder-ui.git
+git clone https://github.com/bapyha-netizen/marauder-ui.git
 cd marauder-ui
 npm install
 npm run dev
 ```
 
-Откройте `http://localhost:3000`
+Откройте `http://localhost:3010`
 
 **Требования:**
 - Chrome 89+ или Edge 89+
 - ESP32 с прошивкой Marauder (CH340/CP2102 драйвер)
-- Node.js 18+
+- Node.js 20+
 
 ---
 
@@ -530,6 +538,7 @@ taskkill /PID <номер> /F
 ### Безопасность
 
 - **CSP strict в production** — `script-src 'self'` без `unsafe-eval`/`unsafe-inline` (Vite-плагин `cspPlugin()`)
+- **XSS защита** — HTML-фильтрация по белому списку тегов (`span`, `b`, `i`, `u`, `br`), удаление `on*` атрибутов
 - **Excel Formula Injection** — CSV-экспорт экранирует `=+−@` префиксы (OWASP)
 - **USB vendor whitelist** — только CP2102, CH340, FTDI, ESP32-S2
 - **beforeunload persistence** — данные сохраняются при закрытии вкладки
@@ -537,6 +546,7 @@ taskkill /PID <номер> /F
 - **Graceful disconnect** — очистка terminalOutput при отключении
 - **ARIA labels** — accessibility для кнопок и навигации
 - **Keyboard navigation** — tabindex на строках таблиц AP/BLE
+- **Password visible warning** — предупреждение при вводе пароля WiFi в команде join
 
 ### Метрики
 
@@ -552,6 +562,20 @@ taskkill /PID <номер> /F
 ---
 
 ## Changelog
+
+### v0.6.0 (2026-06-04) — i18n, MIT License & Security Audit Fixes
+
+- **🌐 i18n** — добавлено переключение русского/английского языка интерфейса:
+  - Кнопка EN/RU в хедере, язык сохраняется в localStorage
+  - Все строки интерфейса переведены на русский и английский
+  - Описания команд и сценариев переключаются между языками
+- **📄 MIT License** — добавлен файл LICENSE
+- **🔒 XSS** — белый список HTML-тегов в `sanitizeText()`, удаление `on*` атрибутов
+- **🏛️ Window globals** — удалены `__setActiveProfile`/`__registerProfile`, заменены на прямые импорты
+- **🔑 Password warning** — предупреждение при вводе пароля WiFi в команде `join`, поле `type="password"`
+- **🧹 Sanitize** — убран мёртвый регекс `[\uD800-\uDFFF]` из `_NON_PRINTABLE`
+- **🗑️ Чистка** — удалена пустая директория `src/components/terminal/`
+- **📐 ESLint** — добавлена базовая конфигурация `.eslintrc.cjs`
 
 ### v0.5.3 (2026-06-04) — Security Hardening & TypeScript Migration Complete
 
@@ -693,4 +717,10 @@ taskkill /PID <номер> /F
 
 ---
 
-*Документация обновлена 4 июня 2026*
+## Лицензия
+
+MIT License. Подробнее см. [LICENSE](LICENSE).
+
+---
+
+*Документация обновлена 4 июня 2026, версия 0.6.0*
