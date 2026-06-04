@@ -1,6 +1,6 @@
 # Marauder UI
 
-**Версия:** 0.7.2 (build 2026-06-05) — Active Speaker Hunt + Passive Monitor
+**Версия:** 0.7.3 (build 2026-06-05) — Unified Command Pipeline Refactoring
 **Прошивка:** [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko
 **Назначение:** Desktop/web UI для управления ESP32 с прошивкой Marauder через Web Serial API
 
@@ -358,6 +358,16 @@ CSV-экспорт экранирует `=+\-@\t\r|` префиксы (OWASP), �
 
 ## Changelog
 
+### v0.7.3 (2026-06-05) — Unified Command Pipeline Refactoring
+
+- **Единый pipeline**: все команды из UI проходят через `runAction → _execute → serialStore.sendCommand/sendAndWait`
+- **CR-1**: безопасная нормализация логов в actionDispatcher (`_safeTerminalLine`)
+- **CR-2**: sendSequence заменён на `runAction` цикл — clearlist side effects работают
+- **HI-2**: добавлен `onPrompt` callback — `resetParserState()` + `resetCtxCache()` при каждом промпте
+- **HI-4**: `triggerRef` добавлен в `clearDevices`, `clearProbes`, `clearSelected`
+- **HI-5**: убраны 4 прямых `sendCommand` из DashboardView
+- **Архитектура**: удалён `sendStop`, фикс `beforeunload` cleanup, NamedHandler, toast throttle revert
+
 ### v0.7.2 (2026-06-05) — Active Speaker Hunt + Passive Monitor Scenarios
 
 - **Active Speaker Hunt**: новый сценарий поиска активно работающих колонок — сканирование всех BLE-брендов, мониторинг WiFi deauth, повторное сканирование для детекции активности, затем `blespam -t speaker`
@@ -425,4 +435,4 @@ MIT License. Подробнее см. [LICENSE](LICENSE).
 
 ---
 
-*Документация обновлена 5 июня 2026, версия 0.7.2*
+*Документация обновлена 5 июня 2026, версия 0.7.3*
