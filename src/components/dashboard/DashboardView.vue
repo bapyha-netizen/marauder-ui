@@ -259,16 +259,16 @@
       </div>
     </div>
 
-    <ConfirmDialog :show="confirmDialog.show"
-      :title="confirmDialog.title"
-      :body="confirmDialog.body"
-      :cmd="confirmDialog.cmd"
-      :target="confirmDialog.target"
-      :icon="confirmDialog.icon"
-      :severity="confirmDialog.severity"
-      :confirm-label="confirmDialog.confirmLabel"
-      @confirm="onConfirmAction"
-      @cancel="onCancelConfirm" />
+    <ConfirmDialog :show="confirmState.show"
+      :title="confirmState.title"
+      :body="confirmState.body"
+      :cmd="confirmState.cmd"
+      :target="confirmState.target"
+      :icon="confirmState.icon"
+      :severity="confirmState.severity"
+      :confirm-label="confirmState.confirmLabel"
+      @confirm="onDialogConfirm"
+      @cancel="onDialogCancel" />
   </div>
 </template>
 
@@ -283,12 +283,13 @@ import { signalClass, dotClass, fmtTimeRelative, fmtTimeHM } from '../../utils/f
 import { useToast } from '../../utils/toast'
 import { copyToClipboard } from '../../utils/clipboard'
 import { runAction, actions as dispatcherActions, runningAction as dispatcherRunning, clearActions } from '../../utils/actionDispatcher'
-import { getCommandMeta, SEVERITY } from '../../services/commandMeta'
+import { useCommandAction } from '../../composables/useCommandAction'
 import ConfirmDialog from '../ConfirmDialog.vue'
 import { SEVERITY_META } from '../../services/commandMeta'
-import { t, tA } from '../../services/i18n'
+import { t } from '../../services/i18n'
 
 const { show: toastShow } = useToast()
+const { confirmState, showConfirm, onDialogConfirm, onDialogCancel } = useCommandAction()
 
 const serialStore = useSerialStore()
 const apStore = useApStore()
@@ -529,7 +530,7 @@ const runActionLocal = async (action) => {
       target
     })
     if (result?.needsConfirm) {
-      showConfirmForAction(result)
+      showConfirm(result)
     }
     if (action.key === 'select' && selectedAP.value?.index !== undefined) {
       apStore.updateAP(selectedAP.value.index, { isSelected: !selectedAP.value.isSelected })
@@ -544,49 +545,7 @@ const runActionLocal = async (action) => {
   }
 }
 
-const confirmDialog = reactive({
-  show: false,
-  title: '',
-  body: '',
-  cmd: '',
-  target: '',
-  icon: '',
-  severity: SEVERITY.HIGH,
-  confirmLabel: 'Run',
-  pendingPayload: null
-})
 
-const showConfirmForAction = (payload) => {
-  const meta = getCommandMeta(payload.cmd)
-  confirmDialog.show = true
-  confirmDialog.title = t('confirm.title', { label: payload.label })
-  confirmDialog.body = meta?.destructive
-    ? tA('confirm.bodyDestructive')
-    : tA('confirm.bodyNormal')
-  confirmDialog.cmd = payload.cmd
-  confirmDialog.target = payload.target
-  confirmDialog.icon = meta?.destructive ? '⚠' : '?'
-  confirmDialog.severity = meta?.severity || SEVERITY.HIGH
-  confirmDialog.confirmLabel = payload.label
-  confirmDialog.pendingPayload = payload
-}
-
-const onConfirmAction = async () => {
-  const payload = confirmDialog.pendingPayload
-  confirmDialog.show = false
-  confirmDialog.pendingPayload = null
-  if (payload) {
-    try {
-      await runAction({ ...payload, options: { confirm: false } })
-    } catch (e) {
-      toastShow(t('dashboard.actionFailed', { msg: e.message }), 'error')
-    }
-  }
-}
-const onCancelConfirm = () => {
-  confirmDialog.show = false
-  confirmDialog.pendingPayload = null
-}
 
 watch(activeTab, (tab) => {
   if (tab === 'ap' || tab === 'stations') {
