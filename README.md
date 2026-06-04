@@ -1,6 +1,6 @@
 # Marauder UI
 
-**Версия:** 0.7.1 (build 2026-06-05) — Layout & Scrolling Fixes
+**Версия:** 0.7.2 (build 2026-06-05) — Active Speaker Hunt + Passive Monitor
 **Прошивка:** [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko
 **Назначение:** Desktop/web UI для управления ESP32 с прошивкой Marauder через Web Serial API
 
@@ -358,6 +358,12 @@ CSV-экспорт экранирует `=+\-@\t\r|` префиксы (OWASP), �
 
 ## Changelog
 
+### v0.7.2 (2026-06-05) — Active Speaker Hunt + Passive Monitor Scenarios
+
+- **Active Speaker Hunt**: новый сценарий поиска активно работающих колонок — сканирование всех BLE-брендов, мониторинг WiFi deauth, повторное сканирование для детекции активности, затем `blespam -t speaker`
+- **Passive Monitor**: новый сценарий пассивного мониторинга — WiFi + BLE сканирование, анализ трафика, channel utilization. Без атакующих команд
+- Кнопка **"🎯 Hunt Active"** в панели BLE (DashboardView) — запускает полный цикл обнаружения и атаки в один клик
+
 ### v0.7.1 (2026-06-05) — Layout & Scrolling Fixes
 
 - **DashboardView**: восстановлена оригинальная вёрстка `h-full` — скроллинг Live Output и Action Log работает внутри модулей
@@ -419,4 +425,4 @@ MIT License. Подробнее см. [LICENSE](LICENSE).
 
 ---
 
-*Документация обновлена 5 июня 2026, версия 0.7.1*
+*Документация обновлена 5 июня 2026, версия 0.7.2*
