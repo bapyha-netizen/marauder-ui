@@ -2,7 +2,7 @@
   <div class="flex-1 min-h-0 min-w-0 flex gap-3">
     <!-- LEFT: Live Output (1/4) -->
     <div class="w-1/4 flex flex-col min-h-0 min-w-0">
-      <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 flex flex-col h-full">
+      <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 flex flex-col flex-1 min-h-0">
         <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700/50 flex-shrink-0">
           <div class="flex items-center space-x-2">
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -54,7 +54,7 @@
 
     <!-- CENTER: Targets list (1/4) -->
     <div class="w-1/4 flex flex-col min-h-0 min-w-0">
-      <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 flex flex-col h-full">
+      <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 flex flex-col flex-1 min-h-0">
         <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700/50 flex-shrink-0">
           <div class="flex items-center space-x-1">
             <button v-for="t in targetTabs" :key="t.id" @click="activeTab = t.id"
@@ -166,13 +166,12 @@
     <!-- RIGHT: Action panel (1/2) -->
     <div class="w-1/2 flex flex-col min-h-0 min-w-0 gap-3">
       <!-- Top: Selected target details + actions -->
-      <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-3 flex-shrink-0">
-        <div v-if="!selectedTarget" class="text-center py-6 text-xs text-slate-600">
-          <div class="text-2xl mb-2">🎯</div>
+      <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-3 flex-shrink-0 overflow-y-auto max-h-32">
+        <div v-if="!selectedTarget" class="text-center py-2 text-xs text-slate-600">
+          <div class="text-lg mb-1">🎯</div>
           <div>{{ $t('dashboard.selectTarget') }}</div>
-          <div class="mt-2 text-[10px] text-slate-700">{{ $t('dashboard.runScan') }}</div>
         </div>
-        <div v-if="!selectedTarget && availableActions.length" class="mt-4">
+        <div v-if="!selectedTarget && availableActions.length" class="mt-2">
           <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">{{ $t('dashboard.adminActions') }}</div>
           <div class="flex flex-wrap gap-1.5">
             <button v-for="action in availableActions" :key="action.key" @click="runActionLocal(action)"
