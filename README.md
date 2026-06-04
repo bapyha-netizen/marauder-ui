@@ -1,6 +1,6 @@
 # Marauder UI
 
-**Версия:** 0.7.3 (build 2026-06-05) — Unified Command Pipeline Refactoring
+**Версия:** 0.7.4 (build 2026-06-05) — All 298 Tests Pass, Critical Bugfixes
 **Прошивка:** [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko
 **Назначение:** Desktop/web UI для управления ESP32 с прошивкой Marauder через Web Serial API
 
@@ -358,6 +358,16 @@ CSV-экспорт экранирует `=+\-@\t\r|` префиксы (OWASP), �
 
 ## Changelog
 
+### v0.7.4 (2026-06-05) — All 298 Tests Pass, Critical Bugfixes
+
+- **CRITICAL**: `apStore.ts` — missing `accessPoints.value.set()` в new AP path (AP не появлялись при сканировании)
+- **CRITICAL**: `apStore.ts` — `addStation()` дропал `isSelected` (станции теряли флаг selected)
+- **Tests**: 298/298 pass (parserEngine 0→62, oui-advanced 0→18, serialReconnect 0→1)
+- **Refactoring**: `useCommandAction` composable внедрён во все 5 компонентов
+- **Cleanup**: удалено 471 строк копипасты (confirmDialog, showConfirm, executeAction)
+- **OUI**: экспортированы `_vendorCache`, `_db` для тестов
+- **serialReconnect**: починен mock `_fireConnect` (detail.port)
+
 ### v0.7.3 (2026-06-05) — Unified Command Pipeline Refactoring
 
 - **Единый pipeline**: все команды из UI проходят через `runAction → _execute → serialStore.sendCommand/sendAndWait`
@@ -435,4 +445,4 @@ MIT License. Подробнее см. [LICENSE](LICENSE).
 
 ---
 
-*Документация обновлена 5 июня 2026, версия 0.7.3*
+*Документация обновлена 5 июня 2026, версия 0.7.4*
