@@ -62,49 +62,35 @@
       </table>
     </div>
 
-    <ConfirmDialog :show="confirmDialog.show"
-      :title="confirmDialog.title"
-      :body="confirmDialog.body"
-      :cmd="confirmDialog.cmd"
-      :target="confirmDialog.target"
-      :icon="confirmDialog.icon"
-      :severity="confirmDialog.severity"
-      :confirm-label="confirmDialog.confirmLabel"
-      @confirm="onConfirm"
-      @cancel="confirmDialog.show = false" />
+    <ConfirmDialog :show="confirmState.show"
+      :title="confirmState.title"
+      :body="confirmState.body"
+      :cmd="confirmState.cmd"
+      :target="confirmState.target"
+      :icon="confirmState.icon"
+      :severity="confirmState.severity"
+      :confirm-label="confirmState.confirmLabel"
+      @confirm="onDialogConfirmCustom"
+      @cancel="onDialogCancel" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed } from 'vue'
 import { useSerialStore } from '../../stores/serialStore'
 import { useProbeStore } from '../../stores/probeStore'
 import { signalClass, fmtTimeRelative } from '../../utils/format'
 import { useToast } from '../../utils/toast'
 import { copyToClipboard } from '../../utils/clipboard'
-import { runAction, shouldConfirm } from '../../utils/actionDispatcher'
-import { getCommandMeta, SEVERITY } from '../../services/commandMeta'
-import { useContextAction } from '../../composables/useContextAction'
+import { useCommandAction } from '../../composables/useCommandAction'
 import ConfirmDialog from '../ConfirmDialog.vue'
 import { t, tA } from '../../services/i18n'
 
 const serialStore = useSerialStore()
 const probeStore = useProbeStore()
 const { show: toastShow } = useToast()
-const ctx = useContextAction(serialStore)
+const { confirmState, execute, onDialogConfirm, onDialogCancel, showConfirm } = useCommandAction()
 const search = ref('')
-
-const confirmDialog = reactive({
-  show: false,
-  title: '',
-  body: '',
-  cmd: '',
-  target: '',
-  icon: '',
-  severity: SEVERITY.HIGH,
-  confirmLabel: 'Run',
-  pendingPayload: null
-})
 
 const filteredProbes = computed(() => {
   let list = probeStore.probes
@@ -127,72 +113,25 @@ const copyMac = async (p) => {
 }
 
 const runDispatched = async (cmd, label, target = '') => {
-  if (!ctx.isConnected.value) {
-    toastShow(t('common.connectFirst'), 'warning')
+  await execute(cmd, label, '▶', target)
+}
+
+const onDialogConfirmCustom = async () => {
+  const payload = confirmState.pendingPayload
+  if (payload && payload.__clear) {
+    confirmState.show = false
+    confirmState.pendingPayload = null
+    probeStore.clearProbes()
+    toastShow(t('probesExplorer.cleared'), 'success')
     return
   }
-  const payload = { cmd, label, icon: '▶', target, options: {} }
-  if (shouldConfirm(cmd)) {
-    showConfirm(payload)
-    return
-  }
-  await executeAction(payload)
-}
-
-const showConfirm = (payload) => {
-  const meta = getCommandMeta(payload.cmd)
-  confirmDialog.show = true
-  confirmDialog.title = t('confirm.title', { label: payload.label })
-  confirmDialog.body = meta?.destructive
-    ? tA('confirm.bodyDestructive')
-    : tA('confirm.bodyNormal')
-  confirmDialog.cmd = payload.cmd
-  confirmDialog.target = payload.target
-  confirmDialog.icon = meta?.destructive ? '⚠' : '?'
-  confirmDialog.severity = meta?.severity || SEVERITY.HIGH
-  confirmDialog.confirmLabel = payload.label
-  confirmDialog.pendingPayload = payload
-}
-
-const handleClearConfirmed = () => {
-  probeStore.clearProbes()
-  toastShow(t('probesExplorer.cleared'), 'success')
-}
-
-const executeAction = async (payload) => {
-  try {
-    await runAction({ ...payload, options: { confirm: false } })
-    if (payload.cmd.startsWith('clearlist')) {
-      probeStore.clearProbes()
-      toastShow(t('probesExplorer.cleared'), 'success')
-    }
-  } catch (e) {
-    toastShow(t('common.failed', { msg: e.message }), 'error')
-  }
-}
-
-const onConfirm = async () => {
-  const payload = confirmDialog.pendingPayload
-  confirmDialog.show = false
-  confirmDialog.pendingPayload = null
-  if (!payload) return
-  if (payload.__clear) {
-    handleClearConfirmed()
-    return
-  }
-  if (payload) await executeAction(payload)
+  await onDialogConfirm()
 }
 
 const handleClear = () => {
   if (probeStore.probeCount === 0) return
-  confirmDialog.show = true
-  confirmDialog.title = t('confirm.title', { label: `Clear ${probeStore.probeCount} probes` })
-  confirmDialog.body = tA('confirm.bodyNormal')
-  confirmDialog.cmd = ''
-  confirmDialog.target = ''
-  confirmDialog.icon = '🗑'
-  confirmDialog.severity = SEVERITY.MEDIUM
-  confirmDialog.confirmLabel = `Clear All`
-  confirmDialog.pendingPayload = { __clear: true }
+  showConfirm({ cmd: '', label: '', icon: '🗑', target: '', options: {}, __clear: true })
+  confirmState.title = t('confirm.title', { label: `Clear ${probeStore.probeCount} probes` })
+  confirmState.body = tA('confirm.bodyNormal')
 }
 </script>

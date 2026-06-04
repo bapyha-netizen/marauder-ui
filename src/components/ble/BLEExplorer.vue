@@ -143,51 +143,38 @@
       </div>
     </div>
 
-    <ConfirmDialog :show="confirmDialog.show"
-      :title="confirmDialog.title"
-      :body="confirmDialog.body"
-      :cmd="confirmDialog.cmd"
-      :target="confirmDialog.target"
-      :icon="confirmDialog.icon"
-      :severity="confirmDialog.severity"
-      :confirm-label="confirmDialog.confirmLabel"
-      @confirm="onConfirm"
-      @cancel="confirmDialog.show = false" />
+    <ConfirmDialog :show="confirmState.show"
+      :title="confirmState.title"
+      :body="confirmState.body"
+      :cmd="confirmState.cmd"
+      :target="confirmState.target"
+      :icon="confirmState.icon"
+      :severity="confirmState.severity"
+      :confirm-label="confirmState.confirmLabel"
+      @confirm="onDialogConfirmCustom"
+      @cancel="onDialogCancel" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed } from 'vue'
 import { useSerialStore } from '../../stores/serialStore'
 import { useBleStore } from '../../stores/bleStore'
 import { signalClass, fmtTimeHM } from '../../utils/format'
 import { useToast } from '../../utils/toast'
 import { copyToClipboard } from '../../utils/clipboard'
-import { runAction, shouldConfirm } from '../../utils/actionDispatcher'
-import { getCommandMeta, SEVERITY } from '../../services/commandMeta'
-import { useContextAction } from '../../composables/useContextAction'
+import { runAction } from '../../utils/actionDispatcher'
+import { useCommandAction } from '../../composables/useCommandAction'
 import ConfirmDialog from '../ConfirmDialog.vue'
 import { t, tA } from '../../services/i18n'
 
 const serialStore = useSerialStore()
 const bleStore = useBleStore()
 const { show: toastShow } = useToast()
-const ctx = useContextAction(serialStore)
+const { confirmState, execute, onDialogConfirm, onDialogCancel, showConfirm } = useCommandAction()
 const search = ref('')
 const sortBy = ref('rssi')
 const selected = ref({})
-
-const confirmDialog = reactive({
-  show: false,
-  title: '',
-  body: '',
-  cmd: '',
-  target: '',
-  icon: '',
-  severity: SEVERITY.HIGH,
-  confirmLabel: 'Run',
-  pendingPayload: null
-})
 
 const SPEAKER_KEYWORDS = ['speaker', 'jbl', 'bose', 'sony', 'marshall', 'soundbox', 'soundbar', 'earbuds', 'headphone', 'headset']
 
@@ -284,59 +271,7 @@ const copySelectedMacs = async () => {
 }
 
 const runDispatched = async (cmd, label, target = '', opts = {}) => {
-  if (!ctx.isConnected.value) {
-    toastShow(t('common.connectFirst'), 'warning')
-    return
-  }
-  const payload = { cmd, label, icon: opts.icon || '▶', target, options: {} }
-  if (shouldConfirm(cmd) || opts.destructive) {
-    showConfirm(payload)
-    return
-  }
-  await executeAction(payload)
-}
-
-const showConfirm = (payload) => {
-  const meta = getCommandMeta(payload.cmd)
-  confirmDialog.show = true
-  confirmDialog.title = t('confirm.title', { label: payload.label })
-  confirmDialog.body = meta?.destructive
-    ? tA('confirm.bodyDestructive')
-    : tA('confirm.bodyNormal')
-  confirmDialog.cmd = payload.cmd
-  confirmDialog.target = payload.target
-  confirmDialog.icon = meta?.destructive ? '⚠' : '?'
-  confirmDialog.severity = meta?.severity || SEVERITY.HIGH
-  confirmDialog.confirmLabel = payload.label
-  confirmDialog.pendingPayload = payload
-}
-
-const executeAction = async (payload) => {
-  try {
-    await runAction({ ...payload, options: { confirm: false } })
-    if (payload.cmd.startsWith('clearlist')) {
-      bleStore.clearDevices()
-      toastShow(t('bleExplorer.cleared'), 'success')
-    }
-  } catch (e) {
-    toastShow(t('common.failed', { msg: e.message }), 'error')
-  }
-}
-
-const handleClearConfirmed = () => {
-  bleStore.clearDevices()
-}
-
-const onConfirm = async () => {
-  const payload = confirmDialog.pendingPayload
-  confirmDialog.show = false
-  confirmDialog.pendingPayload = null
-  if (!payload) return
-  if (payload.__clear) {
-    handleClearConfirmed()
-    return
-  }
-  await executeAction(payload)
+  await execute(cmd, label, opts.icon || '▶', target, opts)
 }
 
 const runSpeakerSpam = (dev) => {
@@ -346,7 +281,7 @@ const runSpeakerSpam = (dev) => {
   else if (name.includes('bose')) type = 'bose'
   else if (name.includes('sony')) type = 'sony'
   else if (name.includes('marshall')) type = 'marshall'
-  runCommand(`blespam -t ${type}`, `Spam ${dev.name}`, { destructive: true })
+  execute(`blespam -t ${type}`, `Spam ${dev.name}`, '🔊', '', { destructive: true })
 }
 
 const runSelectedSpeakerSpam = async () => {
@@ -371,22 +306,26 @@ const runSelectedSpoofAt = async () => {
 
   for (const dev of airtags) {
     if (!dev) continue
-    await runCommand(`spoofat -t ${dev.mac}`, `Spoof ${dev.name}`, { destructive: true })
+    execute(`spoofat -t ${dev.mac}`, `Spoof ${dev.name}`, '🔄', '', { destructive: true })
   }
 }
 
-const runCommand = (cmd, label, opts = {}) => runDispatched(cmd, label, '', opts)
-
 const handleClear = () => {
   if (bleStore.deviceCount === 0) return
-  confirmDialog.show = true
-  confirmDialog.title = t('bleExplorer.clearTitle', { n: bleStore.deviceCount })
-  confirmDialog.body = tA('bleExplorer.clearBody')
-  confirmDialog.cmd = ''
-  confirmDialog.target = ''
-  confirmDialog.icon = '🗑'
-  confirmDialog.severity = SEVERITY.MEDIUM
-  confirmDialog.confirmLabel = t('bleExplorer.clearConfirm', { n: bleStore.deviceCount })
-  confirmDialog.pendingPayload = { __clear: true }
+  showConfirm({ cmd: '', label: '', icon: '🗑', target: '', options: {}, __clear: true })
+  confirmState.title = t('bleExplorer.clearTitle', { n: bleStore.deviceCount })
+  confirmState.body = tA('bleExplorer.clearBody')
+}
+
+const onDialogConfirmCustom = async () => {
+  const payload = confirmState.pendingPayload
+  if (payload && payload.__clear) {
+    confirmState.show = false
+    confirmState.pendingPayload = null
+    bleStore.clearDevices()
+    toastShow(t('bleExplorer.cleared'), 'success')
+    return
+  }
+  await onDialogConfirm()
 }
 </script>
