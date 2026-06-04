@@ -625,9 +625,9 @@ export const WORKFLOWS: Workflow[] = [
     icon: '🔊',
     warning: true,
     steps: [
-      { command: 'sniffbt', desc: 'Initial BLE scan — discovering devices', delay: 8000 },
-      { command: 'stopscan', desc: 'Stop initial scan' },
-      { command: 'sniffbt -t speaker', desc: 'Scanning for BLE speakers', delay: 10000 },
+      { command: 'sniffbt', desc: 'Scanning ALL BLE devices (branded + generic)', delay: 12000 },
+      { command: 'stopscan', desc: 'Stop general scan' },
+      { command: 'sniffbt -t speaker', desc: 'Scanning for detected BLE speakers', delay: 10000 },
       { command: 'stopscan', desc: 'Stop speaker scan' },
       { command: 'sniffbt -t jbl', desc: 'Scanning for JBL speakers', delay: 8000 },
       { command: 'stopscan', desc: 'Stop JBL scan' },
@@ -637,12 +637,12 @@ export const WORKFLOWS: Workflow[] = [
       { command: 'stopscan', desc: 'Stop Sony scan' },
       { command: 'sniffbt -t marshall', desc: 'Scanning for Marshall speakers', delay: 8000 },
       { command: 'stopscan', desc: 'Stop Marshall scan' },
-      { command: 'list -t', desc: 'Listing all discovered speaker devices' },
-      { command: 'sniffdeauth', desc: 'Activity check — monitoring WiFi deauth packets', delay: 8000 },
-      { command: 'stopscan', desc: 'Stop activity check' },
-      { command: 'sniffbt -t speaker', desc: 'Re-scan — detecting active speakers (packet activity)', delay: 10000 },
+      { command: 'list -t', desc: 'Listing all discovered audio devices (branded + unknown)' },
+      { command: 'sniffbt', desc: 'Re-scanning ALL BLE — detecting active non-branded devices', delay: 10000 },
       { command: 'stopscan', desc: 'Stop re-scan' },
-      { command: 'blespam -t speaker', desc: 'ATTACK — persistent speaker spam (stop manually)', stopManual: true }
+      { command: 'sniffbt -t speaker', desc: 'Re-scanning speakers — activity check', delay: 10000 },
+      { command: 'stopscan', desc: 'Stop activity check' },
+      { command: 'blespam -t speaker', desc: 'ATTACK — persistent BLE spam all speaker types (stop manually)', stopManual: true }
     ]
   }
 ]

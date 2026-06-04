@@ -493,10 +493,10 @@ const runActionLocal = async (action) => {
     return
   }
   if (action.huntMode) {
-    if (!confirm(`Launch "${action.label}"?\n\nThis will scan all speaker types, detect active devices, then launch a persistent BLE spam attack.\n\nStop the attack manually when done.`)) return
+    if (!confirm(`Launch "${action.label}"?\n\nThis will scan all BLE devices (branded + generic), detect active speakers, then launch persistent spam.\n\nStop the attack manually when done.`)) return
     toastShow('Starting active speaker hunt...', 'info', 2000)
     serialStore.sendSequence([
-      { command: 'sniffbt', delay: 6000 },
+      { command: 'sniffbt', delay: 10000 },
       'stopscan',
       { command: 'sniffbt -t speaker', delay: 8000 },
       'stopscan',
@@ -509,6 +509,8 @@ const runActionLocal = async (action) => {
       { command: 'sniffbt -t marshall', delay: 6000 },
       'stopscan',
       { command: 'list -t', delay: 2000 },
+      { command: 'sniffbt', delay: 8000 },
+      'stopscan',
       { command: 'sniffbt -t speaker', delay: 8000 },
       'stopscan',
       { command: 'blespam -t speaker' }
