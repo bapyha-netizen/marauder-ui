@@ -15,9 +15,9 @@
           <option value="channel">Channel</option>
           <option value="stations">Clients</option>
         </select>
-        <button @click="runDispatched('scanall', 'Scan APs')" :disabled="!ctx.isConnected.value" :title="ctx.btnState('scanall').title" :class="ctx.btnClass('scanall', 'btn-primary btn-sm')">Scan</button>
-        <button @click="runDispatched('list -a', 'List APs')" :disabled="!ctx.isConnected.value" :title="ctx.btnState('list -a').title" :class="ctx.btnClass('list -a', 'btn-primary btn-sm')">List</button>
-        <button @click="runDispatched('stopscan', 'Stop Scan')" :disabled="!ctx.isConnected.value" :title="ctx.btnState('stopscan').title" :class="ctx.btnClass('stopscan', 'btn-ghost btn-sm')">Stop</button>
+        <button @click="runDispatched('scanall', 'Scan APs')" :disabled="!serialStore.isDemoMode && !ctx.isConnected.value" :title="ctx.btnState('scanall').title" :class="ctx.btnClass('scanall', 'btn-primary btn-sm')">Scan</button>
+        <button @click="runDispatched('list -a', 'List APs')" :disabled="!serialStore.isDemoMode && !ctx.isConnected.value" :title="ctx.btnState('list -a').title" :class="ctx.btnClass('list -a', 'btn-primary btn-sm')">List</button>
+        <button @click="runDispatched('stopscan', 'Stop Scan')" :disabled="!serialStore.isDemoMode && !ctx.isConnected.value" :title="ctx.btnState('stopscan').title" :class="ctx.btnClass('stopscan', 'btn-ghost btn-sm')">Stop</button>
         <button @click="toggleSelectAll" :disabled="!apStore.apCount" :title="allSelected ? 'Deselect all' : 'Select all APs'" :class="['btn-ghost btn-sm', (allSelected ? 'btn-success' : ''), 'disabled:opacity-40 disabled:cursor-not-allowed']">{{ allSelected ? 'Deselect All' : 'Select All' }}</button>
         <button v-if="apStore.accessPoints.size > 0" @click="copyAllBssids" class="btn-ghost btn-sm" title="Copy all BSSIDs (one per line)">Copy All</button>
         <button @click="handleClear" :disabled="!apStore.apCount" :title="apStore.apCount ? `Clear ${apStore.apCount} APs` : 'No APs to clear'" class="btn-ghost btn-sm disabled:opacity-40 disabled:cursor-not-allowed">Clear</button>
@@ -244,7 +244,7 @@ const filteredAPs = computed(() => {
 const toastConnect = () => toastShow(t('common.connectFirst'), 'warning')
 
 const runDispatched = async (cmd, label, target = '', opts = {}) => {
-  if (!ctx.isConnected.value) {
+  if (!serialStore.isDemoMode && !ctx.isConnected.value) {
     toastShow(t('common.connectFirst'), 'warning')
     return
   }
