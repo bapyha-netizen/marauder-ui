@@ -15,9 +15,9 @@
           <option value="channel">Channel</option>
           <option value="stations">Clients</option>
         </select>
-        <button @click="runDispatched('scanall', 'Scan APs')" :disabled="!serialStore.isDemoMode && !ctx.isConnected.value" :title="ctx.btnState('scanall').title" :class="ctx.btnClass('scanall', 'btn-primary btn-sm')">Scan</button>
-        <button @click="runDispatched('list -a', 'List APs')" :disabled="!serialStore.isDemoMode && !ctx.isConnected.value" :title="ctx.btnState('list -a').title" :class="ctx.btnClass('list -a', 'btn-primary btn-sm')">List</button>
-        <button @click="runDispatched('stopscan', 'Stop Scan')" :disabled="!serialStore.isDemoMode && !ctx.isConnected.value" :title="ctx.btnState('stopscan').title" :class="ctx.btnClass('stopscan', 'btn-ghost btn-sm')">Stop</button>
+        <button @click="runDispatched('scanall', 'Scan APs')" :title="ctx.btnState('scanall').title" :class="ctx.btnClass('scanall', 'btn-primary btn-sm')">Scan</button>
+        <button @click="runDispatched('list -a', 'List APs')" :title="ctx.btnState('list -a').title" :class="ctx.btnClass('list -a', 'btn-primary btn-sm')">List</button>
+        <button @click="runDispatched('stopscan', 'Stop Scan')" :title="ctx.btnState('stopscan').title" :class="ctx.btnClass('stopscan', 'btn-ghost btn-sm')">Stop</button>
         <button @click="toggleSelectAll" :disabled="!apStore.apCount" :title="allSelected ? 'Deselect all' : 'Select all APs'" :class="['btn-ghost btn-sm', (allSelected ? 'btn-success' : ''), 'disabled:opacity-40 disabled:cursor-not-allowed']">{{ allSelected ? 'Deselect All' : 'Select All' }}</button>
         <button v-if="apStore.accessPoints.size > 0" @click="copyAllBssids" class="btn-ghost btn-sm" title="Copy all BSSIDs (one per line)">Copy All</button>
         <button @click="handleClear" :disabled="!apStore.apCount" :title="apStore.apCount ? `Clear ${apStore.apCount} APs` : 'No APs to clear'" class="btn-ghost btn-sm disabled:opacity-40 disabled:cursor-not-allowed">Clear</button>
@@ -48,7 +48,7 @@
               :class="ap.isSelected ? 'bg-indigo-500/10' : ''"
               @click="toggleExpand(ap.bssid)">
               <td class="px-3 py-2" @click.stop>
-                <input type="checkbox" :checked="ap.isSelected" @change="toggleSelect(ap)" :disabled="!ctx.isConnected.value" class="accent-indigo-500 cursor-pointer disabled:opacity-40" :title="ap.isSelected ? 'Deselect' : 'Select'">
+                <input type="checkbox" :checked="ap.isSelected" @change="toggleSelect(ap)" class="accent-indigo-500 cursor-pointer" :title="ap.isSelected ? 'Deselect' : 'Select'">
               </td>
               <td class="px-3 py-2 font-mono text-slate-500">{{ ap.index ?? '-' }}</td>
               <td class="px-3 py-2">
@@ -85,10 +85,10 @@
               <td class="px-3 py-2 text-slate-500">{{ fmtTimeRelative(ap.lastSeen) }}</td>
               <td class="px-3 py-2" @click.stop>
                 <div class="flex items-center space-x-1">
-                  <button v-if="ap.index !== undefined" @click="runDispatched(`info -a ${ap.index}`, `Info ${ap.essid}`, ap.bssid)" :disabled="!ctx.isConnected.value" :title="ctx.btnState('info -a 0').title" class="text-slate-500 hover:text-cyan-400 transition-colors disabled:opacity-30" title="Get detailed info" aria-label="Get detailed info">
+                  <button v-if="ap.index !== undefined" @click="runDispatched(`info -a ${ap.index}`, `Info ${ap.essid}`, ap.bssid)" :title="ctx.btnState('info -a 0').title" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Get detailed info" aria-label="Get detailed info">
                     <span class="text-xs">ℹ</span>
                   </button>
-                  <button v-if="ap.index !== undefined && ap.isSelected" @click="runDispatched('attack -t deauth', `Deauth ${ap.essid}`, ap.bssid, { destructive: true })" :disabled="!ctx.isConnected.value" :title="ctx.btnState('attack -t deauth').title" class="text-red-400 hover:text-red-300 transition-colors disabled:opacity-30" title="Deauth this AP" aria-label="Deauth this AP">
+                  <button v-if="ap.index !== undefined && ap.isSelected" @click="runDispatched('attack -t deauth', `Deauth ${ap.essid}`, ap.bssid, { destructive: true })" :title="ctx.btnState('attack -t deauth').title" class="text-red-400 hover:text-red-300 transition-colors" title="Deauth this AP" aria-label="Deauth this AP">
                     <span class="text-xs">⚡</span>
                   </button>
                 </div>
