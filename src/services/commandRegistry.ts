@@ -589,5 +589,60 @@ export const WORKFLOWS: Workflow[] = [
       { command: 'stopscan', desc: 'Stop scan' },
       { command: 'blespam -t all', desc: 'All BLE spam (stop manually)', stopManual: true }
     ]
+  },
+  {
+    id: 'passive-monitor',
+    name: 'Passive Monitor',
+    description: 'Passive environment monitoring — WiFi + BLE scan, traffic analysis, device ranking',
+    ru: 'Пассивный мониторинг среды — сканирование WiFi и BLE, анализ трафика, рейтинг устройств.',
+    icon: '📊',
+    steps: [
+      { command: 'sniffbeacon', desc: 'Capturing WiFi beacons', delay: 10000 },
+      { command: 'sniffprobe', desc: 'Capturing probe requests', delay: 10000 },
+      { command: 'stopscan', desc: 'Stop probe capture' },
+      { command: 'sniffbt', desc: 'Scanning BLE devices', delay: 12000 },
+      { command: 'stopscan', desc: 'Stop BLE scan' },
+      { command: 'packetcount', desc: 'Reading packet stats' },
+      { command: 'list -a', desc: 'Listing all APs', delay: 2000 },
+      { command: 'list -c', desc: 'Listing known stations', delay: 2000 },
+      { command: 'channelanalyzer', desc: 'Analyzing channel utilization' },
+      { command: 'sniffbeacon', desc: 'Re-scanning beacons', delay: 10000 },
+      { command: 'sniffprobe', desc: 'Re-scanning probes', delay: 10000 },
+      { command: 'stopscan', desc: 'Stop capture' },
+      { command: 'sniffbt', desc: 'Re-scanning BLE', delay: 12000 },
+      { command: 'stopscan', desc: 'Stop BLE scan' },
+      { command: 'packetcount', desc: 'Reading updated packet stats' },
+      { command: 'list -a', desc: 'Listing APs after scan', delay: 2000 },
+      { command: 'list -c', desc: 'Listing stations after scan', delay: 2000 },
+      { command: 'channelanalyzer', desc: 'Final channel analysis' }
+    ]
+  },
+  {
+    id: 'active-speaker-hunt',
+    name: 'Active Speaker Hunt',
+    description: 'Find actively playing speakers (BLE/WiFi) by traffic analysis, then jam persistently',
+    ru: 'Поиск активно работающих колонок (BLE/WiFi) по анализу трафика, затем глушение.',
+    icon: '🔊',
+    warning: true,
+    steps: [
+      { command: 'sniffbt', desc: 'Initial BLE scan — discovering devices', delay: 8000 },
+      { command: 'stopscan', desc: 'Stop initial scan' },
+      { command: 'sniffbt -t speaker', desc: 'Scanning for BLE speakers', delay: 10000 },
+      { command: 'stopscan', desc: 'Stop speaker scan' },
+      { command: 'sniffbt -t jbl', desc: 'Scanning for JBL speakers', delay: 8000 },
+      { command: 'stopscan', desc: 'Stop JBL scan' },
+      { command: 'sniffbt -t bose', desc: 'Scanning for Bose speakers', delay: 8000 },
+      { command: 'stopscan', desc: 'Stop Bose scan' },
+      { command: 'sniffbt -t sony', desc: 'Scanning for Sony speakers', delay: 8000 },
+      { command: 'stopscan', desc: 'Stop Sony scan' },
+      { command: 'sniffbt -t marshall', desc: 'Scanning for Marshall speakers', delay: 8000 },
+      { command: 'stopscan', desc: 'Stop Marshall scan' },
+      { command: 'list -t', desc: 'Listing all discovered speaker devices' },
+      { command: 'sniffdeauth', desc: 'Activity check — monitoring WiFi deauth packets', delay: 8000 },
+      { command: 'stopscan', desc: 'Stop activity check' },
+      { command: 'sniffbt -t speaker', desc: 'Re-scan — detecting active speakers (packet activity)', delay: 10000 },
+      { command: 'stopscan', desc: 'Stop re-scan' },
+      { command: 'blespam -t speaker', desc: 'ATTACK — persistent speaker spam (stop manually)', stopManual: true }
+    ]
   }
 ]

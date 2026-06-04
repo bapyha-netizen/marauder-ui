@@ -387,7 +387,8 @@ const BLE_ACTIONS = [
   { key: 'bosespam', label: 'Bose Spam', icon: '🔊', warning: true, cmd: 'blespam -t bose', needsSelected: false },
   { key: 'sonyspam', label: 'Sony Spam', icon: '🔊', warning: true, cmd: 'blespam -t sony', needsSelected: false },
   { key: 'mtlspam',  label: 'Mshall Spam', icon: '🔊', warning: true, cmd: 'blespam -t marshall', needsSelected: false },
-  { key: 'listt',    label: 'List AirTags', icon: '📋', cmd: 'list -t', needsSelected: false }
+  { key: 'listt',    label: 'List AirTags', icon: '📋', cmd: 'list -t', needsSelected: false },
+  { key: 'hunt',     label: 'Hunt Active', icon: '🎯', warning: true, cmd: 'active-speaker-hunt', needsSelected: false, huntMode: true }
 ]
 
 const PROBE_ACTIONS = [
@@ -489,6 +490,30 @@ const actionBtnClass = (action) => {
 const runActionLocal = async (action) => {
   if (!serialStore.isConnected) {
     toastShow(t('common.connectFirst'), 'warning')
+    return
+  }
+  if (action.huntMode) {
+    if (!confirm(`Launch "${action.label}"?\n\nThis will scan all speaker types, detect active devices, then launch a persistent BLE spam attack.\n\nStop the attack manually when done.`)) return
+    toastShow('Starting active speaker hunt...', 'info', 2000)
+    serialStore.sendSequence([
+      { command: 'sniffbt', delay: 6000 },
+      'stopscan',
+      { command: 'sniffbt -t speaker', delay: 8000 },
+      'stopscan',
+      { command: 'sniffbt -t jbl', delay: 6000 },
+      'stopscan',
+      { command: 'sniffbt -t bose', delay: 6000 },
+      'stopscan',
+      { command: 'sniffbt -t sony', delay: 6000 },
+      'stopscan',
+      { command: 'sniffbt -t marshall', delay: 6000 },
+      'stopscan',
+      { command: 'list -t', delay: 2000 },
+      { command: 'sniffbt -t speaker', delay: 8000 },
+      'stopscan',
+      { command: 'blespam -t speaker' }
+    ])
+    toastShow('Active speaker hunt complete — attack running. Press Stop to halt.', 'warning', 5000)
     return
   }
   let cmd = action.cmd
