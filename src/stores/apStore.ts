@@ -284,6 +284,7 @@ export const useApStore = defineStore('ap', () => {
       }
       _updateIndexesForKey(newKey, merged)
       accessPoints.value.set(newKey, merged)
+      triggerRef(accessPoints)
       return
     }
     const newAP: APOpaque = {
@@ -475,6 +476,7 @@ export const useApStore = defineStore('ap', () => {
         console.log(`Fixed ${fixedCount} orphaned indexes during hydration`)
       }
       _recomputeStats()
+      triggerRef(accessPoints)
     }
   }
 
