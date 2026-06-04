@@ -303,13 +303,20 @@ export const useApStore = defineStore('ap', () => {
       rssiHistory: existing?.rssiHistory ? [...existing.rssiHistory] : []
     }
     _updateIndexesForKey(newKey, newAP)
+    accessPoints.value.set(newKey, newAP)
     if (accessPoints.value.size > MAX_APS) {
-      const oldest = accessPoints.value.keys().next().value
-      if (oldest) {
-        const oldestAp = accessPoints.value.get(oldest)
+      const it = accessPoints.value.keys()
+      let oldestKey = it.next().value
+      let oldestTime = Infinity
+      for (const [k, ap] of accessPoints.value) {
+        const t = ap.lastSeen?.getTime() || 0
+        if (t < oldestTime) { oldestTime = t; oldestKey = k }
+      }
+      if (oldestKey) {
+        const oldestAp = accessPoints.value.get(oldestKey)
         if (oldestAp) _removeAPStats(oldestAp)
-        _removeIndexesForKey(oldest)
-        accessPoints.value.delete(oldest)
+        _removeIndexesForKey(oldestKey)
+        accessPoints.value.delete(oldestKey)
       }
     }
     triggerRef(accessPoints)
@@ -340,7 +347,8 @@ export const useApStore = defineStore('ap', () => {
       id: s.id, 
       mac: s.mac, 
       vendor: s.vendor, 
-      lastSeen: s.lastSeen 
+      lastSeen: s.lastSeen, 
+      isSelected: s.isSelected 
     }))
     const updated: APOpaque = { ...ap, stations: updatedStations }
     accessPoints.value.set(apKey, updated)

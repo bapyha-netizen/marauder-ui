@@ -15,7 +15,7 @@ import { useApStore } from '../../stores/apStore'
 import { useBleStore } from '../../stores/bleStore'
 import { useDashboardStore } from '../../stores/dashboardStore'
 import { useProbeStore } from '../../stores/probeStore'
-import { parseLine, parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil, startParser, stopParser, resetCtxCache } from '../parserEngine.ts'
+import { parseLine, parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil, startParser, stopParser, resetCtxCache } from '../parserEngine'
 
 describe('parseLine — ESP32 Marauder output parser', () => {
   let apStore, bleStore, dashStore, probeStore
@@ -151,17 +151,21 @@ describe('parseLine — ESP32 Marauder output parser', () => {
     })
 
     it('appends station to correct AP', () => {
+      parseLine('-65 Ch: 6 AA:BB:CC:11:22:33 ESSID: HomeNet')
       parseLine('[0] HomeNet -65:')
       parseLine('  [5] 00:11:22:33:44:55')
       const ap = apStore.accessPoints.get('AA:BB:CC:11:22:33')
+      expect(ap).toBeDefined()
       expect(ap.stations.length).toBe(1)
       expect(ap.stations[0].id).toBe(5)
     })
 
     it('marks (selected) station', () => {
+      parseLine('-65 Ch: 6 AA:BB:CC:11:22:33 ESSID: HomeNet')
       parseLine('[0] HomeNet -65:')
       parseLine('  [3] 00:11:22:33:44:55 (selected)')
       const ap = apStore.accessPoints.get('AA:BB:CC:11:22:33')
+      expect(ap).toBeDefined()
       expect(ap.stations[0].isSelected).toBe(true)
     })
   })
