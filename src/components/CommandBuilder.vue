@@ -79,33 +79,35 @@
       </div>
     </Teleport>
 
-    <ConfirmDialog :show="confirmDialog.show"
-      :title="confirmDialog.title"
-      :body="confirmDialog.body"
-      :cmd="confirmDialog.cmd"
-      :target="confirmDialog.target"
-      :icon="confirmDialog.icon"
-      :severity="confirmDialog.severity"
-      :confirm-label="confirmDialog.confirmLabel"
-      @confirm="onConfirm"
-      @cancel="onCancelConfirm" />
+    <ConfirmDialog :show="confirmState.show"
+      :title="confirmState.title"
+      :body="confirmState.body"
+      :cmd="confirmState.cmd"
+      :target="confirmState.target"
+      :icon="confirmState.icon"
+      :severity="confirmState.severity"
+      :confirm-label="confirmState.confirmLabel"
+      @confirm="onDialogConfirmCustom"
+      @cancel="onDialogCancelCustom" />
   </div>
 </template>
 
 <script setup>
-import { ref, onUnmounted, reactive, watch } from 'vue'
+import { ref, onUnmounted, watch } from 'vue'
 import { useSerialStore } from '../stores/serialStore'
 import { useDashboardStore } from '../stores/dashboardStore'
 import { useApStore } from '../stores/apStore'
 import { useBleStore } from '../stores/bleStore'
 import { COMMAND_GROUPS } from '../services/commandRegistry'
-import { getCommandMeta, SEVERITY, SEVERITY_META } from '../services/commandMeta'
+import { getCommandMeta, SEVERITY_META } from '../services/commandMeta'
 import { runAction, getPrereqState, shouldConfirm } from '../utils/actionDispatcher'
 import { sanitizeText } from '../utils/sanitize'
+import { useCommandAction } from '../composables/useCommandAction'
 import ConfirmDialog from './ConfirmDialog.vue'
-import { t, tA, locale } from '../services/i18n'
+import { t, locale } from '../services/i18n'
 import { useToast } from '../utils/toast'
 const { show: toastShow } = useToast()
+const { confirmState, showConfirm, onDialogConfirm, onDialogCancel } = useCommandAction()
 
 const serialStore = useSerialStore()
 const cmdLang = locale
@@ -121,18 +123,6 @@ let tipTimer = null
 const promptModal = ref(null)
 const promptValues = ref([])
 let promptResolve = null
-
-const confirmDialog = reactive({
-  show: false,
-  title: '',
-  body: '',
-  cmd: '',
-  target: '',
-  icon: '',
-  severity: SEVERITY.HIGH,
-  confirmLabel: 'Run',
-  pendingPayload: null
-})
 
 const PROMPT_RULES = [
   { re: /^select -a (\d+)$/, fields: [{ label: 'AP index (0-99)', placeholder: '0' }], build: (v) => 'select -a ' + v, isPassword: false },
@@ -212,21 +202,6 @@ const cancelPrompt = async () => {
   }
 }
 
-const showConfirmForPayload = (payload) => {
-  const meta = getCommandMeta(payload.cmd)
-  confirmDialog.show = true
-  confirmDialog.title = t('confirm.title', { label: payload.label })
-  confirmDialog.body = meta?.destructive
-    ? tA('confirm.bodyDestructive')
-    : tA('confirm.bodyNormal')
-  confirmDialog.cmd = payload.cmd
-  confirmDialog.target = payload.target
-  confirmDialog.icon = meta?.destructive ? '⚠' : '?'
-  confirmDialog.severity = meta?.severity || SEVERITY.HIGH
-  confirmDialog.confirmLabel = payload.label
-  confirmDialog.pendingPayload = payload
-}
-
 const executePayload = async (payload) => {
   try {
     const result = await runAction({
@@ -237,7 +212,7 @@ const executePayload = async (payload) => {
       options: { confirm: false }
     })
     if (result?.needsConfirm) {
-      showConfirmForPayload(result)
+      showConfirm(result)
       return
     }
     dashStore.incrementCommands()
@@ -267,22 +242,22 @@ const send = async (cmdObj) => {
   }
   const payload = { cmd: resolved, label: cmdObj.label, icon: cmdObj.icon, target: '' }
   if (shouldConfirm(resolved)) {
-    showConfirmForPayload(payload)
+      showConfirm(payload)
     return
   }
   await executePayload(payload)
 }
 
-const onConfirm = async () => {
-  const payload = confirmDialog.pendingPayload
-  confirmDialog.show = false
-  confirmDialog.pendingPayload = null
+const onDialogConfirmCustom = async () => {
+  const payload = confirmState.pendingPayload
+  confirmState.show = false
+  confirmState.pendingPayload = null
   if (payload) await executePayload(payload)
 }
 
-const onCancelConfirm = () => {
-  confirmDialog.show = false
-  confirmDialog.pendingPayload = null
+const onDialogCancelCustom = () => {
+  confirmState.show = false
+  confirmState.pendingPayload = null
 }
 
 const sendCustom = () => {
