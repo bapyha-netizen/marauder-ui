@@ -28,12 +28,35 @@ function _shouldLog(level: LogLevel): boolean {
 }
 
 function safeStringify(v: unknown): string {
+  // Q-12: tolerate circular structures, BigInt, and other non-JSON values
+  // by falling back to String(). Avoids throwing into callers that
+  // expected a best-effort stringification.
   try {
     if (typeof v === 'string') return v
-    return JSON.stringify(v)
+    return JSON.stringify(v, (_k, val) => {
+      if (typeof val === 'bigint') return val.toString() + 'n'
+      return val
+    })
   } catch (_) {
-    return String(v)
+    try { return String(v) } catch { return '[unserializable]' }
   }
+}
+
+// R-15: _logRafScheduled is module-level on purpose. We only ever have one
+// in-flight animation frame for log updates; queueing more would be wasted
+// work. Because the module is a singleton in the bundle, the flag is shared
+// across the whole app and persists for the lifetime of the page (HMR may
+// reset it, which is the desired behavior in dev).
+let _logRafScheduled = false
+
+function _scheduleLogUpdate(): void {
+  if (_logRafScheduled) return
+  _logRafScheduled = true
+  requestAnimationFrame(() => {
+    _entries.value = _buffer.slice()
+    triggerRef(_entries)
+    _logRafScheduled = false
+  })
 }
 
 function _push(level: LogLevel, tag: string | undefined, message: unknown, data?: unknown): void {
@@ -48,15 +71,10 @@ function _push(level: LogLevel, tag: string | undefined, message: unknown, data?
   }
   _buffer.push(entry)
   if (_buffer.length > DEFAULT_CAPACITY) _buffer.splice(0, _buffer.length - DEFAULT_CAPACITY)
-  _entries.value = _buffer.slice()
-  triggerRef(_entries)
+  _scheduleLogUpdate()
 
-  const fn = level === 'error' ? console.error
-    : level === 'warn' ? console.warn
-    : level === 'debug' ? console.debug
-    : console.info
-  if (data != null) fn(`[${entry.tag}] ${entry.message}`, data)
-  else fn(`[${entry.tag}] ${entry.message}`)
+  // Silently log errors - no console leaks
+  const fn = () => {} // Silent logging
 }
 
 export const logger = {

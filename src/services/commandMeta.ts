@@ -16,7 +16,7 @@ export const SEVERITY_META: Record<SeverityValue, { label: string; color: string
   [SEVERITY.CRITICAL]: { label: 'Critical', color: 'red', icon: '◉', weight: 4 }
 }
 
-interface CommandMetaEntry {
+export interface CommandMetaEntry {
   severity: SeverityValue
   category: string
   target?: string
@@ -130,13 +130,15 @@ export const COMMAND_META: Record<string, CommandMetaEntry> = {
   'portscan -s https':  { severity: SEVERITY.INFO,     category: 'scan',     target: 'network',  resultHint: 'HTTPS port scan' }
 }
 
+const COMMAND_META_KEYS_SORTED = Object.keys(COMMAND_META).sort((a, b) => b.length - a.length)
+
 export function getCommandMeta(cmd: string): CommandMetaEntry | null {
   if (!cmd) return null
   const trimmed = cmd.trim()
   if (COMMAND_META[trimmed]) return COMMAND_META[trimmed]
-  for (const [key, meta] of Object.entries(COMMAND_META)) {
+  for (const key of COMMAND_META_KEYS_SORTED) {
     if (trimmed.startsWith(key + ' ') || trimmed.startsWith(key + '\t')) {
-      return meta
+      return COMMAND_META[key]
     }
   }
   if (trimmed.startsWith('select -a')) return { severity: SEVERITY.INFO, category: 'select', target: 'wifi', resultHint: 'AP selected' }

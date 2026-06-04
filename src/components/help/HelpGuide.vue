@@ -6,7 +6,7 @@
         <span class="text-[11px] text-slate-500">{{ totalCommands }} команд</span>
       </div>
       <div class="relative">
-        <input v-model="search" placeholder="Поиск команды..."
+        <input v-model="search" type="search" placeholder="Поиск команды..." aria-label="Поиск команды"
           class="w-56 pl-7 pr-2 py-1.5 text-xs bg-slate-800 rounded-lg border border-slate-600 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors">
         <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs">🔍</span>
       </div>

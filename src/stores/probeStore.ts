@@ -17,21 +17,16 @@ export const useProbeStore = defineStore('probe', () => {
 
   const probeCount = computed(() => probes.value.length)
 
-  const reversedProbes = computed(() => {
-    const p = probes.value
-    const res = new Array(p.length)
-    for (let i = 0; i < p.length; i++) res[i] = p[p.length - 1 - i]
-    return res
-  })
-
   const uniqueClients = computed(() => {
     const s = new Set(probes.value.map(p => p.clientMac))
     return s.size
   })
 
   function addProbe(rssi: number, ch: number, clientMac: string, ssid: string) {
-    probes.value.push({ rssi, ch, clientMac: clientMac.toUpperCase(), ssid, time: new Date() })
-    if (probes.value.length > 500) probes.value.shift()
+    // Newest-first prepend. Capped at 500 entries to bound memory + IndexedDB write size.
+    const next = [{ rssi, ch, clientMac: clientMac.toUpperCase(), ssid, time: new Date() }, ...probes.value]
+    if (next.length > 500) next.length = 500
+    probes.value = next
     triggerRef(probes)
   }
 
@@ -56,15 +51,19 @@ export const useProbeStore = defineStore('probe', () => {
     debouncedSave(PERSIST_KEY, items)
   }, { deep: false })
 
+  let _hydrated = false
+
   async function hydrate() {
+    if (_hydrated) return
+    _hydrated = true
     const saved = await loadStore(PERSIST_KEY)
     if (!saved || saved.length === 0) return
-    const restored = saved.map((p: any): ProbeRecord => ({
-      rssi: p.rssi,
-      ch: p.ch,
-      clientMac: p.clientMac,
-      ssid: p.ssid,
-      time: p.time ? new Date(p.time) : new Date()
+    const restored = saved.map((p: Record<string, unknown>): ProbeRecord => ({
+      rssi: Number(p.rssi) || 0,
+      ch: Number(p.ch) || 0,
+      clientMac: String(p.clientMac) || '',
+      ssid: String(p.ssid) || '',
+      time: p.time && typeof p.time === 'string' || typeof p.time === 'number' ? new Date(p.time) : new Date()
     }))
     const existing = probes.value || []
     const existingIds = new Set(existing.map(p => `${p.clientMac}-${p.time?.getTime?.()}`))
@@ -73,10 +72,9 @@ export const useProbeStore = defineStore('probe', () => {
       const id = `${p.clientMac}-${p.time?.getTime?.()}`
       if (!existingIds.has(id)) merged.push(p)
     }
-    merged.sort((a, b) => a.time.getTime() - b.time.getTime())
     probes.value = merged.slice(-500)
     triggerRef(probes)
   }
 
-  return { probes, reversedProbes, probeCount, uniqueClients, addProbe, clearProbes, hydrate }
+  return { probes, probeCount, uniqueClients, addProbe, clearProbes, hydrate }
 })

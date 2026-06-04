@@ -7,7 +7,7 @@
         <span class="text-[11px] text-slate-500">{{ probeStore.uniqueClients }} unique clients</span>
       </div>
       <div class="flex items-center space-x-2">
-        <input v-model="search" placeholder="Search SSID/MAC..." class="input w-40 text-xs">
+        <input v-model="search" type="search" placeholder="Search SSID/MAC..." class="input w-40 text-xs" aria-label="Search probes">
         <button @click="runDispatched('sniffprobe', 'Sniff Probes', '')" :disabled="!ctx.isConnected.value" :title="ctx.btnState('sniffprobe').title" :class="ctx.btnClass('sniffprobe', 'btn-primary btn-sm')">Sniff</button>
         <button @click="runDispatched('stopscan', 'Stop Sniff')" :disabled="!ctx.isConnected.value" :title="ctx.btnState('stopscan').title" :class="ctx.btnClass('stopscan', 'btn-ghost btn-sm')">Stop</button>
         <button @click="runDispatched('list -p', 'List Probes')" :disabled="!ctx.isConnected.value" :title="ctx.btnState('list -p').title" :class="ctx.btnClass('list -p', 'btn-ghost btn-sm')">List</button>
@@ -19,13 +19,13 @@
       <table class="w-full text-xs">
         <thead class="bg-slate-800 sticky top-0 z-10">
           <tr>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-10">#</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider">SSID</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-36">Client MAC</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-14">CH</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-16">RSSI</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-16">Time</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-20">Actions</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-10">#</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider">SSID</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-36">Client MAC</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-14">CH</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-16">RSSI</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-16">Time</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-20">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -36,7 +36,7 @@
             <td class="px-3 py-2 font-mono text-slate-400 text-[11px]">
               <div class="flex items-center space-x-1.5">
                 <span>{{ p.clientMac }}</span>
-                <button @click="copyMac(p)" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy MAC">
+                <button @click="copyMac(p)" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy MAC" aria-label="Copy MAC">
                   <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                 </button>
               </div>
@@ -45,7 +45,7 @@
             <td class="px-3 py-2 font-mono font-medium" :class="signalClass(p.rssi)">{{ p.rssi }}</td>
             <td class="px-3 py-2 text-slate-500">{{ fmtTimeRelative(p.time) }}</td>
             <td class="px-3 py-2">
-              <button @click="copyMac(p)" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy client MAC">
+              <button @click="copyMac(p)" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy client MAC" aria-label="Copy client MAC">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
               </button>
             </td>
@@ -106,7 +106,7 @@ const confirmDialog = reactive({
 })
 
 const filteredProbes = computed(() => {
-  let list = probeStore.reversedProbes
+  let list = probeStore.probes
   if (search.value) {
     const q = search.value.toLowerCase()
     list = list.filter(p =>
@@ -156,7 +156,10 @@ const showConfirm = (payload) => {
 const executeAction = async (payload) => {
   try {
     await runAction({ ...payload, options: { confirm: false } })
-    if (payload.cmd.startsWith('clearlist')) probeStore.clearProbes()
+    if (payload.cmd.startsWith('clearlist')) {
+      probeStore.clearProbes()
+      toastShow('Probe list cleared', 'success')
+    }
   } catch (e) {
     toastShow(`Failed: ${e.message}`, 'error')
   }

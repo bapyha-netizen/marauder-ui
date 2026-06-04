@@ -19,10 +19,11 @@
       </template>
 
       <div class="flex items-center space-x-1 px-2 py-1.5">
-        <input v-model="custom" @keyup.enter="sendCustom"
+        <label for="custom-command" class="sr-only">Custom command</label>
+        <input v-model="custom" @keyup.enter="sendCustom" id="custom-command"
           class="w-20 lg:w-28 px-2 py-1 text-xs bg-slate-800 rounded-lg border border-slate-600 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-          placeholder="cmd...">
-        <button @click="sendCustom" class="btn-primary btn-sm">→</button>
+          placeholder="e.g., scanall, list, set..." aria-label="Enter custom command like scanall, list, or set">
+        <button @click="sendCustom" class="btn-primary btn-sm" aria-label="Send custom command">→</button>
       </div>
     </div>
 
@@ -49,20 +50,28 @@
     <Teleport to="body">
       <div v-if="promptModal"
         class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-        @click.self="cancelPrompt">
+        @click.self="cancelPrompt"
+        @keydown.escape="cancelPrompt"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="prompt-title"
+        aria-describedby="prompt-description"
+        tabindex="-1">
         <div class="bg-slate-800 rounded-xl border border-slate-700 p-5 max-w-sm w-full shadow-2xl">
-          <h3 class="text-sm font-bold text-slate-100 mb-1 font-mono">{{ promptModal.command }}</h3>
-          <p class="text-xs text-slate-400 mb-4">Fill in the parameters below</p>
+          <h3 id="prompt-title" class="text-sm font-bold text-slate-100 mb-1 font-mono">{{ promptModal.command }}</h3>
+          <p id="prompt-description" class="text-xs text-slate-400 mb-4">Fill in the parameters below</p>
           <div class="space-y-3">
             <div v-for="(field, i) in promptModal.fields" :key="i">
-              <label class="text-xs text-slate-400 block mb-1">{{ field.label }}</label>
-              <input v-model="promptValues[i]" :placeholder="field.placeholder"
+              <label :for="`prompt-field-${i}`" class="text-xs text-slate-400 block mb-1">{{ field.label }}</label>
+              <input :id="`prompt-field-${i}`" v-model="promptValues[i]" :placeholder="field.placeholder"
                 class="input text-sm w-full font-mono" @keyup.enter="submitPrompt">
             </div>
           </div>
           <div class="flex gap-2 mt-5">
-            <button @click="cancelPrompt" class="btn-ghost flex-1 text-sm">Cancel</button>
-            <button @click="submitPrompt" class="btn-primary flex-1 text-sm">Send</button>
+            <button @click="cancelPrompt" @keyup.escape="cancelPrompt" class="btn-ghost flex-1 text-sm" aria-label="Cancel command" aria-describedby="cancel-help">Cancel</button>
+            <span id="cancel-help" class="sr-only">Press Escape or click to cancel command input</span>
+            <button @click="submitPrompt" class="btn-primary flex-1 text-sm" aria-label="Send command" aria-describedby="submit-help">Send</button>
+            <span id="submit-help" class="sr-only">Press Enter or click to send command with parameters</span>
           </div>
         </div>
       </div>
@@ -90,6 +99,7 @@ import { useBleStore } from '../stores/bleStore'
 import { COMMAND_GROUPS } from '../services/commandRegistry'
 import { getCommandMeta, SEVERITY, SEVERITY_META } from '../services/commandMeta'
 import { runAction, getPrereqState, shouldConfirm } from '../utils/actionDispatcher'
+import { sanitizeText } from '../utils/sanitize'
 import ConfirmDialog from './ConfirmDialog.vue'
 
 const serialStore = useSerialStore()
@@ -119,19 +129,19 @@ const confirmDialog = reactive({
 })
 
 const PROMPT_RULES = [
-  { re: /^select -a (\d+)$/, fields: [{ label: 'AP index', placeholder: '0' }], build: (v) => 'select -a ' + v },
-  { re: /^select -a -f "contains (.+)"$/, fields: [{ label: 'Search text', placeholder: 'Home' }], build: (v) => 'select -a -f "contains ' + v + '"' },
-  { re: /^select -a -f "equals (.+)"$/, fields: [{ label: 'Exact SSID', placeholder: 'MyWiFi' }], build: (v) => 'select -a -f "equals ' + v + '"' },
-  { re: /^join -a (\d+) -p "(.+)"$/, fields: [{ label: 'AP index', placeholder: '0' }, { label: 'Password', placeholder: '' }], build: (v1, v2) => 'join -a ' + v1 + ' -p "' + v2 + '"' },
-  { re: /^add -a -b ([0-9A-F:]+) -e "(.+)"$/i, fields: [{ label: 'BSSID (MAC)', placeholder: 'AA:BB:CC:DD:EE:FF' }, { label: 'SSID name', placeholder: '' }], build: (m, s) => 'add -a -b ' + m + ' -e "' + s + '"' },
-  { re: /^add -c -b ([0-9A-F:]+) -ap (\d+)$/i, fields: [{ label: 'BSSID (MAC)', placeholder: 'AA:BB:CC:DD:EE:FF' }, { label: 'AP index', placeholder: '0' }], build: (m, i) => 'add -c -b ' + m + ' -ap ' + i },
-  { re: /^ssid -a -n "(.+)"$/, fields: [{ label: 'SSID name', placeholder: '' }], build: (v) => 'ssid -a -n "' + v + '"' },
-  { re: /^ssid -r (\d+)$/, fields: [{ label: 'SSID index', placeholder: '0' }], build: (v) => 'ssid -r ' + v },
-  { re: /^cloneapmac -a (\d+)$/, fields: [{ label: 'AP index', placeholder: '0' }], build: (v) => 'cloneapmac -a ' + v },
-  { re: /^clonestamac -s (\d+)$/, fields: [{ label: 'Station index', placeholder: '0' }], build: (v) => 'clonestamac -s ' + v },
-  { re: /^info -a (\d+)$/, fields: [{ label: 'AP index', placeholder: '0' }], build: (v) => 'info -a ' + v },
-  { re: /^led -s (#[0-9A-F]+)$/i, fields: [{ label: 'Hex color', placeholder: '#FF0000' }], build: (v) => 'led -s ' + v },
-  { re: /^brightness -s (\d+)$/, fields: [{ label: 'Brightness (0-9)', placeholder: '5' }], build: (v) => 'brightness -s ' + v },
+  { re: /^select -a (\d+)$/, fields: [{ label: 'AP index (0-99)', placeholder: '0' }], build: (v) => 'select -a ' + v },
+  { re: /^select -a -f "contains (.+)"$/, fields: [{ label: 'Search text (partial SSID)', placeholder: 'Home' }], build: (v) => 'select -a -f "contains ' + v + '"' },
+  { re: /^select -a -f "equals (.+)"$/, fields: [{ label: 'Exact SSID match', placeholder: 'MyWiFi' }], build: (v) => 'select -a -f "equals ' + v + '"' },
+  { re: /^join -a (\d+) -p "(.+)"$/, fields: [{ label: 'AP index (0-99)', placeholder: '0' }, { label: 'WiFi password', placeholder: 'Enter password...' }], build: (v1, v2) => 'join -a ' + v1 + ' -p "' + v2 + '"' },
+  { re: /^add -a -b ([0-9A-F:]+) -e "(.+)"$/i, fields: [{ label: 'BSSID (MAC)', placeholder: 'AA:BB:CC:DD:EE:FF' }, { label: 'SSID name', placeholder: 'Enter network name...' }], build: (m, s) => 'add -a -b ' + m + ' -e "' + s + '"' },
+  { re: /^add -c -b ([0-9A-F:]+) -ap (\d+)$/i, fields: [{ label: 'BSSID (MAC)', placeholder: 'AA:BB:CC:DD:EE:FF' }, { label: 'AP index (0-99)', placeholder: '0' }], build: (m, i) => 'add -c -b ' + m + ' -ap ' + i },
+  { re: /^ssid -a -n "(.+)"$/, fields: [{ label: 'New SSID name', placeholder: 'Enter network name...' }], build: (v) => 'ssid -a -n "' + v + '"' },
+  { re: /^ssid -r (\d+)$/, fields: [{ label: 'SSID index (0-99)', placeholder: '0' }], build: (v) => 'ssid -r ' + v },
+  { re: /^cloneapmac -a (\d+)$/, fields: [{ label: 'AP index (0-99)', placeholder: '0' }], build: (v) => 'cloneapmac -a ' + v },
+  { re: /^clonestamac -s (\d+)$/, fields: [{ label: 'Station index (0-99)', placeholder: '0' }], build: (v) => 'clonestamac -s ' + v },
+  { re: /^info -a (\d+)$/, fields: [{ label: 'AP index (0-99)', placeholder: '0' }], build: (v) => 'info -a ' + v },
+  { re: /^led -s (#[0-9A-F]+)$/i, fields: [{ label: 'Hex color (e.g., #FF0000)', placeholder: '#FF0000' }], build: (v) => 'led -s ' + v },
+  { re: /^brightness -s (\d+)$/, fields: [{ label: 'Brightness level (0-9)', placeholder: '5' }], build: (v) => 'brightness -s ' + v },
 ]
 
 const cmdStateCache = new Map()
@@ -176,20 +186,27 @@ const resolveCommand = (cmd) => {
 const submitPrompt = () => {
   const modal = promptModal.value
   if (!modal) return
-  const vals = promptValues.value.map(v => v.trim())
+  const vals = promptValues.value.map(v => sanitizeText(v, { maxLength: 128 }))
   const result = modal.build(...vals)
   promptModal.value = null
+  promptValues.value = []
   if (promptResolve) {
     promptResolve(result)
     promptResolve = null
   }
 }
 
-const cancelPrompt = () => {
+const cancelPrompt = async () => {
+  const { useToast } = await import('../utils/toast')
+  const { show: toastShow } = useToast()
+  
   promptModal.value = null
+  promptValues.value = []
   if (promptResolve) {
     promptResolve(null)
     promptResolve = null
+    // Show feedback that the action was cancelled
+    toastShow('Action cancelled', 'info', 2000)
   }
 }
 

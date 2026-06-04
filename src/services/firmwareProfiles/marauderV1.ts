@@ -1,4 +1,5 @@
 import { lookupVendor } from '../../utils/oui'
+import { sanitizeText } from '../../utils/sanitize'
 import type { ParserContext, FirmwareProfile, ParserFn } from '../../types/parser'
 import { useProbeStore } from '../../stores/probeStore'
 
@@ -17,6 +18,8 @@ const DEAUTH_SNIFF_RE = new RegExp(`^(-?\\d+)\\s+Ch:\\s*(\\d+)\\s+${MAC_RE.sourc
 const PROBE_SNIFF_RE = new RegExp(`^(-?\\d+)\\s+Ch:\\s*(\\d+)\\s+Client:\\s+(${MAC_RE.source})\\s+Requesting:\\s+(.+)`)
 const PMKID_CAPTURE_RE = new RegExp(`Received EAPOL:\\s*(${MAC_RE.source})`)
 const BLE_SNIFF_MAC_RE = new RegExp(`^(-?\\d+)\\s+${MAC_RE.source}\\s*$`)
+const AP_INFO_LAST_SEEN_RE = /^Last seen:\s*(.+)/
+const AP_INFO_STATIONS_RE = /^Stations:\s*(\d+)/
 
 let _infoAPIndex = -1
 let _ipListBuffer: { index: number; ip: string; mac: string }[] = []
@@ -25,7 +28,10 @@ function parseAPBeacon(line: string, ctx: ParserContext): boolean {
   const m = line.match(AP_BEACON_RE)
   if (!m) return false
   const [, rssi, ch, bssid, essidRaw] = m
-  const essid = essidRaw.replace(/[^\x20-\x7E]/g, '').trim() || '(hidden)'
+  // D-06: use sanitizeText for Unicode normalization and to strip ANSI /
+  // invisible / control characters in one pass. The previous regex only
+  // caught ASCII control bytes, leaving RTL overrides and ZWSP intact.
+  const essid = sanitizeText(essidRaw, { maxLength: 64 }) || '(hidden)'
   ctx.apStore.updateOrAddAP({
     rssi: safeInt(rssi),
     channel: safeInt(ch) ?? 0,
@@ -52,15 +58,17 @@ function parseAPList(line: string, ctx: ParserContext): boolean {
     rssi = safeInt(rssiMatch[1])
     essid = essid.replace(/\s*-?\d+$/, '').trim()
   }
-  const apData: Record<string, unknown> = {
-    index: safeInt(index),
-    channel: safeInt(ch) ?? 0,
+  const parsedIndex = safeInt(index)
+const apData = {
+    index: parseInt(m[1]),
+    channel: parseInt(m[2]),
+    bssid: m[3],
     essid: essid || '(hidden)',
     rssi,
-    lastSeen: new Date()
+    lastSeen: new Date(),
+    isSelected: isSelected || false
   }
-  if (isSelected) apData.isSelected = true
-  ctx.apStore.updateOrAddAP(apData as any)
+  ctx.apStore.updateOrAddAP(apData)
   ctx.dashStore.addEvent('list', line)
   return true
 }
@@ -89,7 +97,7 @@ function parseStationList(line: string, ctx: ParserContext): boolean {
   const apM = line.match(apRe)
   if (apM) {
     const [, index, essid] = apM
-    ctx.dashStore.setLastStationAP(safeInt(index) ?? 0, essid.trim())
+    ctx.dashStore.setLastStationAP(Number(index), essid.trim())
     return true
   }
   const staM = line.match(STATION_LIST_STA_RE)
@@ -100,7 +108,7 @@ function parseStationList(line: string, ctx: ParserContext): boolean {
       const found = ctx.apStore.findAPByIndex(apIndex)
       if (found) {
         ctx.apStore.addStation(found.key, {
-          id: safeInt(staIndex) ?? 0,
+          id: Number(staIndex),
           mac: staMac.toUpperCase(),
           isSelected: line.includes('(selected)')
         })
@@ -128,7 +136,7 @@ function parseProbeSniff(line: string, ctx: ParserContext): boolean {
   const trimmedSsid = ssid.trim()
   ctx.dashStore.addEvent('probe', `Probe: ${clientMac} -> ${trimmedSsid} Ch:${ch} RSSI:${rssi}`)
   ctx.dashStore.incrementPackets()
-  useProbeStore().addProbe(safeInt(rssi) ?? 0, safeInt(ch) ?? 0, clientMac, trimmedSsid)
+  useProbeStore().addProbe(Number(rssi), Number(ch), clientMac, trimmedSsid)
   return true
 }
 
@@ -162,7 +170,7 @@ function parseBLESniff(line: string, ctx: ParserContext): boolean {
       const vendor = lookupVendor(mac)
       ctx.bleStore.updateOrAddDevice({
         mac,
-        rssi: safeInt(rssi) ?? 0,
+        rssi: Number(rssi),
         name: vendor || `BLE Device ${mac}`,
         manufacturer: vendor || '',
         lastSeen: new Date()
@@ -171,7 +179,7 @@ function parseBLESniff(line: string, ctx: ParserContext): boolean {
       const name = rawName.trim()
       ctx.bleStore.updateOrAddDevice({
         mac: `BLE:${name.toUpperCase()}`,
-        rssi: safeInt(rssi) ?? 0,
+        rssi: Number(rssi),
         name,
         lastSeen: new Date()
       })
@@ -186,7 +194,7 @@ function parseBLESniff(line: string, ctx: ParserContext): boolean {
     const vendor = lookupVendor(macUpper)
     ctx.bleStore.updateOrAddDevice({
       mac: macUpper,
-      rssi: safeInt(rssi) ?? 0,
+      rssi: Number(rssi),
       name: vendor || `BLE ${macUpper}`,
       manufacturer: vendor || '',
       lastSeen: new Date()
@@ -243,9 +251,9 @@ function parsePacketCount(line: string, ctx: ParserContext): boolean {
   const m = line.match(re)
   if (!m) return false
   const [, type, count] = m
-  const key = type.toLowerCase() as keyof import('../../types').PacketCounts
+  const key = type.toLowerCase() as 'beacon' | 'probe' | 'deauth' | 'eapol' | 'data' | 'management'
   if (['beacon', 'probe', 'deauth', 'eapol', 'data', 'management'].includes(key)) {
-    ctx.dashStore.setPacketCounts({ [key]: safeInt(count, 0) } as any)
+    ctx.dashStore.setPacketCounts({ [key]: safeInt(count, 0) })
     return true
   }
   return false
@@ -260,7 +268,11 @@ function parseChannelAnalyzer(line: string, ctx: ParserContext): boolean {
   const m = line.match(re)
   if (!m) return false
   const [, ch, count] = m
-  ctx.dashStore.setChannelUtilization({ [safeInt(ch, 0) ?? 0]: safeInt(count, 0) ?? 0 })
+  const channel = safeInt(ch, 0)
+  const utilization = safeInt(count, 0) ?? 0
+  if (channel !== null) {
+    ctx.dashStore.setChannelUtilization({ [channel]: utilization })
+  }
   return true
 }
 
@@ -268,52 +280,51 @@ function parseAPInfo(line: string, ctx: ParserContext): boolean {
   const idxRe = /^Index:\s*(\d+)/
   const idxM = line.match(idxRe)
   if (idxM) {
-    _infoAPIndex = safeInt(idxM[1], -1) ?? -1
+    const index = safeInt(idxM[1], -1)
+    ctx.infoAPIndex = index ?? -1
     return true
   }
-  if (_infoAPIndex < 0) return false
+  if (ctx.infoAPIndex < 0) return false
 
   const bssidRe = /^BSSID:\s*([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})/
   const bssidM = line.match(bssidRe)
-  if (bssidM) { ctx.apStore.updateAP(_infoAPIndex, { bssid: bssidM[1].toUpperCase() }); return true }
+  if (bssidM) { ctx.apStore.updateAP(ctx.infoAPIndex, { bssid: bssidM[1].toUpperCase() }); return true }
 
   const secRe = /^Security:\s*(.+)/
   const secM = line.match(secRe)
-  if (secM) { ctx.apStore.updateAP(_infoAPIndex, { encryption: secM[1].trim() }); return true }
+  if (secM) { ctx.apStore.updateAP(ctx.infoAPIndex, { encryption: secM[1].trim() }); return true }
 
   const venRe = /^Vendor:\s*(.+)/
   const venM = line.match(venRe)
-  if (venM) { ctx.apStore.updateAP(_infoAPIndex, { vendor: venM[1].trim() }); return true }
+  if (venM) { ctx.apStore.updateAP(ctx.infoAPIndex, { vendor: venM[1].trim() }); return true }
 
   const chanRe = /^Channel:\s*(\d+)/
   const chanM = line.match(chanRe)
-  if (chanM) { ctx.apStore.updateAP(_infoAPIndex, { channel: safeInt(chanM[1]) ?? 0 }); return true }
+  if (chanM) { ctx.apStore.updateAP(ctx.infoAPIndex, { channel: safeInt(chanM[1]) ?? 0 }); return true }
 
   const rssiRe = /^RSSI:\s*(-?\d+)/
   const rssiM = line.match(rssiRe)
-  if (rssiM) { ctx.apStore.updateAP(_infoAPIndex, { rssi: safeInt(rssiM[1]) }); return true }
+  if (rssiM) { ctx.apStore.updateAP(ctx.infoAPIndex, { rssi: safeInt(rssiM[1]) }); return true }
 
   const encRe = /^Encryption:\s*(.+)/
   const encM = line.match(encRe)
-  if (encM) { ctx.apStore.updateAP(_infoAPIndex, { encryption: encM[1].trim() }); return true }
+  if (encM) { ctx.apStore.updateAP(ctx.infoAPIndex, { encryption: encM[1].trim() }); return true }
 
   const essidRe = /^ESSID:\s*(.+)/
   const essidM = line.match(essidRe)
-  if (essidM) { ctx.apStore.updateAP(_infoAPIndex, { essid: essidM[1].trim() }); return true }
+  if (essidM) { ctx.apStore.updateAP(ctx.infoAPIndex, { essid: essidM[1].trim() }); return true }
 
-  const lastSeenRe = /^Last seen:\s*(.+)/
-  if (lastSeenRe.test(line)) return true
+  if (AP_INFO_LAST_SEEN_RE.test(line)) return true
 
-  const stationsRe = /^Stations:\s*(\d+)/
-  if (stationsRe.test(line)) return true
+  if (AP_INFO_STATIONS_RE.test(line)) return true
 
-  _infoAPIndex = -1
+  ctx.infoAPIndex = -1
   return false
 }
 
 function parseIPList(line: string, ctx: ParserContext): boolean {
   if (/^IP List/i.test(line) || /^─{3,}$/.test(line)) {
-    _ipListBuffer = []
+    ctx.ipListBuffer = []
     return true
   }
   const re = /^\[(\d+)\]\s+(\S+)/
@@ -321,12 +332,12 @@ function parseIPList(line: string, ctx: ParserContext): boolean {
   if (!m) return false
   const [, idx, ip] = m
   const macMatch = line.match(MAC_RE)
-  _ipListBuffer.push({
+  ctx.ipListBuffer.push({
     index: safeInt(idx) ?? 0,
     ip,
     mac: macMatch ? macMatch[1].toUpperCase() : ''
   })
-  ctx.dashStore.setIPList([..._ipListBuffer])
+  ctx.dashStore.setIPList([...ctx.ipListBuffer])
   return true
 }
 
@@ -374,10 +385,23 @@ export const FALLBACK_PARSERS: ParserFn[] = [
 
 export const META = {
   id: 'marauder-v1',
-  description: 'Current upstream Marauder output grammar (v1.x firmware)'
+  description: 'Current upstream Marauder output grammar (v1.x firmware)',
+  // Q-13: tighter than /^>\s*$/ — the old pattern would match any line
+  // beginning with '>'. Marauder v1.x prints either ">" (interactive) or
+  // "esp32marauder>" as a prompt, and only the line itself (possibly with
+  // trailing ANSI/cursor escapes). We still allow an optional trailing
+  // escape sequence and require nothing else after the prompt.
+  prompt: /^(?:>\s*|esp32marauder>\s*)$/i
 }
 
-export function resetState(): void {
-  _infoAPIndex = -1
-  _ipListBuffer = []
+export const marauderV1: FirmwareProfile = {
+  name: 'marauderV1',
+  id: META.id,
+  description: META.description,
+  version: 1,
+  DISPATCH,
+  FALLBACK_PARSERS,
+  resetState: () => ({})
 }
+
+export function resetState(): void {}

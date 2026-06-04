@@ -13,29 +13,40 @@
             <button @click="paused = !paused"
               :class="paused ? 'bg-amber-600/50 text-amber-200' : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'"
               class="px-1.5 py-0.5 text-[10px] rounded-md transition-colors"
-              :title="paused ? 'Resume terminal output' : 'Pause terminal output'">
+              :title="paused ? 'Resume terminal output' : 'Pause terminal output'"
+              :aria-label="paused ? 'Resume terminal output' : 'Pause terminal output'">
               {{ paused ? '▶ Resume' : '⏸ Pause' }}
             </button>
             <button @click="autoScroll = !autoScroll"
               :class="!autoScroll ? 'bg-amber-600/50 text-amber-200' : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'"
-              class="px-1.5 py-0.5 text-[10px] rounded-md transition-colors">
+              class="px-1.5 py-0.5 text-[10px] rounded-md transition-colors"
+              :title="autoScroll ? 'Disable auto-scroll' : 'Enable auto-scroll'"
+              :aria-label="autoScroll ? 'Disable auto-scroll' : 'Enable auto-scroll'">
               {{ autoScroll ? '⤓ Auto' : '⊘ Manual' }}
             </button>
             <button @click="copyTerminal" v-if="serialStore.terminalOutput.length"
-              class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors">Copy</button>
+              class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors"
+              aria-label="Copy terminal output">Copy</button>
             <button @click="serialStore.clearOutput()"
-              class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors">Clear</button>
+              class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors"
+              aria-label="Clear terminal output">Clear</button>
           </div>
         </div>
         <div ref="liveRef" @scroll="onTerminalScroll"
-          class="flex-1 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed scrollbar-thin bg-black/30">
+          class="flex-1 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed scrollbar-thin bg-black/30"
+          role="log" aria-live="polite" aria-label="Live serial output">
           <div :style="{ height: spacerTop + 'px' }"></div>
           <div v-for="(line, i) in visibleTerminalLines" :key="visibleStart + i"
             class="hover:bg-white/5 rounded px-1 -mx-1"
-            :class="line.cls">{{ line.text }}</div>
+            :class="line.cls"
+            v-html="line.text"></div>
           <div :style="{ height: spacerBottom + 'px' }"></div>
           <div v-if="!serialStore.terminalOutput.length" class="text-slate-600 text-center py-8">
-            Waiting for data...
+            <div class="text-2xl mb-2">⚡</div>
+            <div class="mb-2">Waiting for data...</div>
+            <div class="text-xs text-slate-500">
+              {{ serialStore.isConnected ? 'Device connected, data incoming...' : 'Connect device to start receiving data' }}
+            </div>
           </div>
         </div>
       </div>
@@ -113,7 +124,7 @@
               <div>No probes</div>
               <button @click="serialStore.sendCommand('sniffprobe')" class="mt-2 text-indigo-400 hover:text-indigo-300">Run sniffprobe</button>
             </div>
-            <div v-for="(p, i) in probeStore.reversedProbes" :key="i"
+            <div v-for="(p, i) in probeStore.probes" :key="i"
               class="p-2 mb-1 rounded-lg bg-slate-700/20 hover:bg-slate-700/40 transition-colors">
               <div class="flex items-center space-x-2">
                 <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(p.rssi)"></div>
@@ -179,16 +190,17 @@
                 <span v-if="selectedTarget.vendor" class="px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400">{{ selectedTarget.vendor }}</span>
               </div>
             </div>
-            <button @click="clearSelection" class="text-slate-500 hover:text-slate-200 text-lg flex-shrink-0 ml-2" title="Clear selection">✕</button>
+            <button @click="clearSelection" class="text-slate-500 hover:text-slate-200 text-lg flex-shrink-0 ml-2" title="Clear selection" aria-label="Clear selection">✕</button>
           </div>
           <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 mt-2">Actions</div>
           <div class="flex flex-wrap gap-1.5">
             <button v-for="action in availableActions" :key="action.key" @click="runActionLocal(action)"
-              :disabled="!actionState(action).canRun"
+              :disabled="!actionState(action).canRun || !!actionRunning"
               :class="actionBtnClass(action)"
               :title="actionState(action).tooltip"
               class="px-2.5 py-1.5 text-[11px] font-medium rounded-md border transition-colors flex items-center space-x-1 disabled:opacity-40 disabled:cursor-not-allowed">
-              <span>{{ action.icon }}</span>
+              <span v-if="actionRunning && actionRunning.id === action.id" class="animate-spin">⏳</span>
+              <span v-else>{{ action.icon }}</span>
               <span>{{ action.label }}</span>
             </button>
             <div v-if="!availableActions.length" class="text-[10px] text-slate-600">No actions for this target</div>
@@ -253,7 +265,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, reactive } from 'vue'
+import { ref, computed, watch, reactive, onMounted, onUnmounted } from 'vue'
 import { useSerialStore } from '../../stores/serialStore'
 import { useApStore } from '../../stores/apStore'
 import { useBleStore } from '../../stores/bleStore'
@@ -577,12 +589,22 @@ const onTerminalResize = () => {
   }
 }
 
-watch(liveRef, (ref) => {
-  if (ref) {
+let _resizeObserver = null
+
+onMounted(() => {
+  if (liveRef.value) {
     onTerminalResize()
-    new ResizeObserver(onTerminalResize).observe(ref)
+    _resizeObserver = new ResizeObserver(onTerminalResize)
+    _resizeObserver.observe(liveRef.value)
   }
-}, { immediate: true })
+})
+
+onUnmounted(() => {
+  if (_resizeObserver) {
+    _resizeObserver.disconnect()
+    _resizeObserver = null
+  }
+})
 
 const copyTerminal = async () => {
   const text = serialStore.terminalOutput

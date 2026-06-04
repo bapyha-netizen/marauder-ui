@@ -22,13 +22,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
     return `${m}m ${s}s`
   })
 
-  const eventsReversed = computed(() => {
-    const ev = events.value
-    const res = new Array(ev.length)
-    for (let i = 0; i < ev.length; i++) res[i] = ev[ev.length - 1 - i]
-    return res
-  })
-
   let tickInterval: ReturnType<typeof setInterval> | null = null
 
   function startTick() {
@@ -49,8 +42,16 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   function addEvent(type: string, data: string) {
-    events.value.push({ type, data, time: new Date() })
-    if (events.value.length > 200) events.value.shift()
+    // Newest-first prepend. Capped at 200 entries to bound memory + IndexedDB write size.
+    //
+    // U-07: events are not yet surfaced in the UI. They are kept in the store
+    // so that future panels (e.g. a "Recent activity" feed in the dashboard
+    // or a debug overlay) can render them without plumbing changes. The
+    // `events` ref is already reactive; subscribe to it from a component to
+    // display.
+    const next = [{ type, data, time: new Date() }, ...events.value]
+    if (next.length > 200) next.length = 200
+    events.value = next
     triggerRef(events)
   }
 
@@ -90,7 +91,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   return {
-    commandsSent, packetsCaptured, sessionStart, events, eventsReversed,
+    commandsSent, packetsCaptured, sessionStart, events,
     sessionDuration, lastStationAPIndex, lastStationAPName,
     packetCounts, channelUtilization, ipList,
     incrementCommands, incrementPackets,

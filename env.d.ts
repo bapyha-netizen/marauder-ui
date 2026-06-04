@@ -10,6 +10,22 @@ declare module '../utils/oui' {
   export function lookupVendor(mac: string): string
 }
 
+declare module '../utils/ouiData' {
+  export const OUI_DATA: Record<string, string>
+}
+
+declare module '../utils/ouiData.js' {
+  export const OUI_DATA: Record<string, string>
+}
+
+declare module './utils/ouiData' {
+  export const OUI_DATA: Record<string, string>
+}
+
+declare module './utils/ouiData.js' {
+  export const OUI_DATA: Record<string, string>
+}
+
 declare module '../../utils/oui' {
   export function lookupVendor(mac: string): string
 }

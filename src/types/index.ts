@@ -21,7 +21,7 @@ export interface Station {
 export interface BLEDevice {
   mac: string
   name: string
-  rssi: number
+  rssi: number | null
   isAirtag?: boolean
   manufacturer?: string
   lastSeen: Date

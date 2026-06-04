@@ -1,4 +1,6 @@
-interface CommandEntry {
+// Q-17: interfaces are exported so tests and other modules can type-check
+// against the same shapes.
+export interface CommandEntry {
   label: string
   command: string
   icon: string
@@ -7,13 +9,13 @@ interface CommandEntry {
   warning?: boolean
 }
 
-interface CommandGroup {
+export interface CommandGroup {
   name: string
   nameRu: string
   commands: CommandEntry[]
 }
 
-interface WorkflowStep {
+export interface WorkflowStep {
   command: string
   desc: string
   delay?: number
@@ -23,9 +25,10 @@ interface WorkflowStep {
   placeholder?: string
   forEachAP?: boolean
   stopManual?: boolean
+  inputValidator?: (input: string) => boolean
 }
 
-interface Workflow {
+export interface Workflow {
   id: string
   name: string
   description: string

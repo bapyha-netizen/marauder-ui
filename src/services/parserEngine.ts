@@ -1,22 +1,106 @@
 import { useApStore } from '../stores/apStore'
 import { useBleStore } from '../stores/bleStore'
 import { useDashboardStore } from '../stores/dashboardStore'
-import { DISPATCH, FALLBACK_PARSERS, resetState as profileReset } from './firmwareProfiles/marauderV1'
-import type { ParserContext } from '../types/parser'
+import { marauderV1 } from './firmwareProfiles/marauderV1'
+import type { ParserContext, FirmwareProfile } from '../types/parser'
 import { metrics } from '../utils/metrics'
+
+// AR-03: Profile-aware parser system
+const PROFILE_PARSERS = new Map<string, {
+  dispatch: Record<number, ((line: string, ctx: ParserContext) => boolean)[]>
+  fallbackParsers: ((line: string, ctx: ParserContext) => boolean)[]
+  reset: () => void
+}>()
+
+// Register the marauderV1 profile
+PROFILE_PARSERS.set('marauderV1', {
+  dispatch: marauderV1.DISPATCH,
+  fallbackParsers: marauderV1.FALLBACK_PARSERS,
+  reset: marauderV1.resetState
+})
+
+let _activeProfile: string = 'marauderV1'
+
+// Global profile management for cross-component communication
+if (typeof window !== 'undefined') {
+  window.__setActiveProfile = (profileName: string) => {
+    if (!PROFILE_PARSERS.has(profileName)) {
+      throw new Error(`Unknown firmware profile: ${profileName}`)
+    }
+    _activeProfile = profileName
+  }
+  
+  window.__registerProfile = (profile: FirmwareProfile) => {
+    PROFILE_PARSERS.set(profile.name, {
+      dispatch: profile.DISPATCH,
+      fallbackParsers: profile.FALLBACK_PARSERS,
+      reset: profile.resetState
+    })
+  }
+}
+
+export function setActiveProfile(profileName: string): void {
+  if (!PROFILE_PARSERS.has(profileName)) {
+    throw new Error(`Unknown firmware profile: ${profileName}`)
+  }
+  _activeProfile = profileName
+  // Notify global listeners
+  if (typeof window !== 'undefined' && window.__onProfileChange) {
+    window.__onProfileChange(profileName)
+  }
+}
+
+export function getActiveProfile(): string {
+  return _activeProfile
+}
+
+export function registerProfile(profile: FirmwareProfile): void {
+  PROFILE_PARSERS.set(profile.name, {
+    dispatch: profile.DISPATCH,
+    fallbackParsers: profile.FALLBACK_PARSERS,
+    reset: profile.resetState
+  })
+}
 
 const CLEANUP_INTERVAL = 30000
 const AP_MAX_AGE = 300000
 
 let intervalId: ReturnType<typeof setInterval> | null = null
+let _isStarting = false
+
+let _ctx: ParserContext | null = null
+function getCtx(): ParserContext {
+  if (!_ctx) {
+    _ctx = {
+      apStore: useApStore(),
+      bleStore: useBleStore(),
+      dashStore: useDashboardStore(),
+      infoAPIndex: -1,
+      ipListBuffer: []
+    }
+  }
+  return _ctx
+}
+
+export function resetCtxCache(): void {
+  _ctx = null
+}
 
 export function startParser(): void {
-  if (intervalId) return
-  intervalId = setInterval(() => {
-    try {
-      useApStore().removeOldAPs(AP_MAX_AGE)
-    } catch (_) { /* ignore */ }
-  }, CLEANUP_INTERVAL)
+  if (intervalId || _isStarting) return
+  _isStarting = true
+  // AR-03: Profile-aware parser system. The parser now dynamically selects
+  // the appropriate dispatch tables and parsers based on the active firmware profile.
+  // Profile switching is handled at runtime without module reloading.
+  try {
+    intervalId = setInterval(() => {
+      try {
+        useApStore().removeOldAPs(AP_MAX_AGE)
+      } catch (_) { /* ignore */ }
+    }, CLEANUP_INTERVAL)
+  } finally {
+    _isStarting = false
+  }
 }
 
 export function stopParser(): void {
@@ -27,7 +111,10 @@ export function stopParser(): void {
 }
 
 export function resetParserState(): void {
-  profileReset()
+  const profile = PROFILE_PARSERS.get(_activeProfile)
+  if (profile) {
+    profile.reset()
+  }
 }
 
 export function parseLine(line: string): void {
@@ -37,21 +124,22 @@ export function parseLine(line: string): void {
 
   metrics.inc('parserDispatched', 1)
 
-  const ctx: ParserContext = {
-    apStore: useApStore(),
-    bleStore: useBleStore(),
-    dashStore: useDashboardStore()
+  const ctx = getCtx()
+  const profile = PROFILE_PARSERS.get(_activeProfile)
+  
+  if (!profile) {
+    throw new Error(`No parser profile found: ${_activeProfile}`)
   }
 
   const first = trimmed.charCodeAt(0)
-  const buckets = DISPATCH[first]
+  const buckets = profile.dispatch[first]
   if (buckets) {
     for (let i = 0; i < buckets.length; i++) {
       if (buckets[i](trimmed, ctx)) return
     }
   }
-  for (let i = 0; i < FALLBACK_PARSERS.length; i++) {
-    if (FALLBACK_PARSERS[i](trimmed, ctx)) return
+  for (let i = 0; i < profile.fallbackParsers.length; i++) {
+    if (profile.fallbackParsers[i](trimmed, ctx)) return
   }
   metrics.inc('parserMisses', 1)
 }

@@ -6,6 +6,9 @@ const RING_SIZE = 60
 interface MetricSnapshot {
   serialLines: number
   serialBytes: number
+  serialBufferTrimmed: number
+  serialLinesTruncated: number
+  serialDecodeErrors: number
   parserDispatched: number
   parserMisses: number
   terminalPushes: number
@@ -15,6 +18,9 @@ interface MetricSnapshot {
 interface MetricCounters {
   serialLines: number
   serialBytes: number
+  serialBufferTrimmed: number
+  serialLinesTruncated: number
+  serialDecodeErrors: number
   parserDispatched: number
   parserMisses: number
   terminalPushes: number
@@ -25,6 +31,9 @@ type MetricKey = keyof MetricCounters
 const _counters: MetricCounters = {
   serialLines: 0,
   serialBytes: 0,
+  serialBufferTrimmed: 0,
+  serialLinesTruncated: 0,
+  serialDecodeErrors: 0,
   parserDispatched: 0,
   parserMisses: 0,
   terminalPushes: 0
@@ -33,13 +42,16 @@ const _counters: MetricCounters = {
 const _history: Record<MetricKey, number[]> = {
   serialLines: [],
   serialBytes: [],
+  serialBufferTrimmed: [],
+  serialLinesTruncated: [],
+  serialDecodeErrors: [],
   parserDispatched: [],
   parserMisses: [],
   terminalPushes: []
 }
 
 function _empty(): MetricSnapshot {
-  return { serialLines: 0, serialBytes: 0, parserDispatched: 0, parserMisses: 0, terminalPushes: 0, timestamp: 0 }
+  return { serialLines: 0, serialBytes: 0, serialBufferTrimmed: 0, serialLinesTruncated: 0, serialDecodeErrors: 0, parserDispatched: 0, parserMisses: 0, terminalPushes: 0, timestamp: 0 }
 }
 
 const _snapshot = shallowRef<MetricSnapshot>(_empty())
@@ -57,18 +69,28 @@ function _sample(): void {
   const snap: MetricSnapshot = {
     serialLines: _counters.serialLines,
     serialBytes: _counters.serialBytes,
+    serialBufferTrimmed: _counters.serialBufferTrimmed,
+    serialLinesTruncated: _counters.serialLinesTruncated,
+    serialDecodeErrors: _counters.serialDecodeErrors,
     parserDispatched: _counters.parserDispatched,
     parserMisses: _counters.parserMisses,
     terminalPushes: _counters.terminalPushes,
     timestamp: Date.now()
   }
-  for (const key of Object.keys(_counters) as MetricKey[]) {
-    _pushHistory(key, _counters[key])
-    _counters[key] = 0
+  for (const key of Object.keys(_counters)) {
+    _pushHistory(key as keyof MetricCounters, _counters[key as keyof MetricCounters])
+    _counters[key as keyof MetricCounters] = 0
   }
   _snapshot.value = snap
   _lastSample.value = Date.now()
   triggerRef(_snapshot)
+}
+
+function _stopTimer(): void {
+  if (_timer !== null) {
+    clearInterval(_timer)
+    _timer = null
+  }
 }
 
 function _ensureTimer(): void {
@@ -88,10 +110,15 @@ export const metrics = {
     _ensureTimer()
   },
 
+  stop(): void {
+    _stopTimer()
+  },
+
   reset(): void {
-    for (const key of Object.keys(_counters) as MetricKey[]) {
-      _counters[key] = 0
-      _history[key].length = 0
+    _stopTimer()
+for (const key of Object.keys(_counters)) {
+      _counters[key as keyof MetricCounters] = 0
+      _history[key as keyof MetricCounters].length = 0
     }
     _snapshot.value = _empty()
     triggerRef(_snapshot)

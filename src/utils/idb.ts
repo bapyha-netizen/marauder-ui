@@ -11,11 +11,12 @@ function openDB(): Promise<IDBDatabase> {
   _dbPromise = new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') {
       reject(new Error('IndexedDB not available'))
+      _dbPromise = null
       return
     }
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result
+      const db = (event.target as IDBOpenDBRequest)?.result
       for (const name of STORES) {
         if (!db.objectStoreNames.contains(name)) {
           if (name === 'preferences' || name === 'stats') {
@@ -26,8 +27,29 @@ function openDB(): Promise<IDBDatabase> {
         }
       }
     }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
+    req.onsuccess = () => {
+      const db = req.result
+      // R-11: another tab opened the DB at a newer version. The spec says
+      // we must close the connection so the upgrade can proceed. Closing
+      // here can race with in-flight transactions; downstream code calls
+      // openDB() again on the next putItem / getItem and gets a fresh
+      // connection. We do not currently surface a "reload me" prompt to
+      // the user — most sessions only have one tab, so this is rare in
+      // practice. If the app ever becomes multi-tab-aware, this is the
+      // hook to show one.
+      db.onversionchange = () => {
+        try { db.close() } catch (_) { /* ignore */ }
+        _dbPromise = null
+      }
+      db.onclose = () => {
+        _dbPromise = null
+      }
+      resolve(db)
+    }
+    req.onerror = () => {
+      _dbPromise = null
+      reject(req.error)
+    }
   })
   return _dbPromise
 }
@@ -37,15 +59,44 @@ export function _resetDbPromise() {
 }
 
 export async function putItem(storeName: string, value: any): Promise<IDBValidKey> {
+  // Validate input to prevent cache poisoning
+  if (!value || typeof value !== 'object') {
+    throw new Error(`putItem('${storeName}'): value must be an object`)
+  }
+  
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readwrite')
     const store = tx.objectStore(storeName)
-    const req = (storeName === 'preferences' || storeName === 'stats')
-      ? store.put(value, value.id || 'default')
-      : store.put(value)
+    let req: IDBRequest<IDBValidKey>
+    if (storeName === 'preferences' || storeName === 'stats') {
+      if (!value || !value.id) {
+        reject(new Error(`putItem('${storeName}'): value.id is required`))
+        return
+      }
+      // Validate ID to prevent injection attacks
+      if (typeof value.id !== 'string' && typeof value.id !== 'number') {
+        reject(new Error(`putItem('${storeName}'): value.id must be string or number`))
+        return
+      }
+      req = store.put(value, value.id)
+    } else {
+      // Validate data for other stores
+      if (storeName === 'accessPoints' || storeName === 'bleDevices' || storeName === 'probes') {
+        if (!value.id && !value.bssid && !value.mac) {
+          reject(new Error(`putItem('${storeName}'): value must have id, bssid, or mac`))
+          return
+        }
+      }
+      req = store.put(value)
+    }
     req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
+    req.onerror = () => {
+      // Prevent double rejection by ensuring we only reject once
+      if (!tx.abort) {
+        reject(req.error)
+      }
+    }
   })
 }
 
@@ -56,7 +107,12 @@ export async function getItem(storeName: string, key: IDBValidKey): Promise<any>
     const store = tx.objectStore(storeName)
     const req = store.get(key)
     req.onsuccess = () => resolve(req.result || null)
-    req.onerror = () => reject(req.error)
+    req.onerror = () => {
+      // Prevent double rejection by ensuring we only reject once
+      if (!tx.abort) {
+        reject(req.error)
+      }
+    }
   })
 }
 
@@ -67,7 +123,12 @@ export async function getAll(storeName: string): Promise<any[]> {
     const store = tx.objectStore(storeName)
     const req = store.getAll()
     req.onsuccess = () => resolve(req.result || [])
-    req.onerror = () => reject(req.error)
+    req.onerror = () => {
+      // Prevent double rejection by ensuring we only reject once
+      if (!tx.abort) {
+        reject(req.error)
+      }
+    }
   })
 }
 
@@ -78,7 +139,12 @@ export async function clearStore(storeName: string): Promise<void> {
     const store = tx.objectStore(storeName)
     const req = store.clear()
     req.onsuccess = () => resolve()
-    req.onerror = () => reject(req.error)
+    req.onerror = () => {
+      // Prevent double rejection by ensuring we only reject once
+      if (!tx.abort) {
+        reject(req.error)
+      }
+    }
   })
 }
 
@@ -87,19 +153,44 @@ export async function clearAll(): Promise<void> {
 }
 
 export async function putAll(storeName: string, items: any[]): Promise<void> {
+  // Validate input to prevent cache poisoning
+  if (!Array.isArray(items)) {
+    throw new Error(`putAll('${storeName}'): items must be an array`)
+  }
+  
+  if (items.length === 0) { return }
+  
+  // Validate each item
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    if (!item || typeof item !== 'object') {
+      throw new Error(`putAll('${storeName}'): item at index ${i} must be an object`)
+    }
+  }
+  
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readwrite')
     const store = tx.objectStore(storeName)
-    let remaining = items.length
-    if (remaining === 0) { resolve(); return }
     let hasError = false
+    
     for (const item of items) {
       const req = store.put(item)
-      req.onsuccess = () => { if (--remaining === 0 && !hasError) resolve() }
-      req.onerror = () => { if (!hasError) { hasError = true; reject(req.error) } }
+      req.onerror = () => {
+        hasError = true
+        try { tx.abort() } catch (_) { /* tx may already be aborted */ }
+      }
     }
-    tx.oncomplete = () => { if (!hasError && remaining === 0) resolve() }
+    
+    tx.oncomplete = () => {
+      if (!hasError) resolve()
+    }
+    tx.onerror = () => {
+      if (!hasError) reject(tx.error)
+    }
+    tx.onabort = () => {
+      if (!hasError) reject(tx.error || new Error('Transaction aborted'))
+    }
   })
 }
 

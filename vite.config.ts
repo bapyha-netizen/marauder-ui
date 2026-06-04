@@ -51,7 +51,7 @@ export default defineConfig({
     checker({ typescript: true }),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icon.svg'],
+      includeAssets: ['favicon.svg', 'icon.svg', 'apple-touch-icon-*.svg'],
       manifest: {
         name: 'ESP32 Marauder UI',
         short_name: 'Marauder',
@@ -63,7 +63,10 @@ export default defineConfig({
         start_url: './',
         icons: [
           { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-          { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' }
+          { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+          { src: 'apple-touch-icon-180x180.svg', sizes: '180x180', type: 'image/svg+xml', purpose: 'any' },
+          { src: 'apple-touch-icon-152x152.svg', sizes: '152x152', type: 'image/svg+xml', purpose: 'any' },
+          { src: 'apple-touch-icon-120x120.svg', sizes: '120x120', type: 'image/svg+xml', purpose: 'any' }
         ]
       },
       workbox: {
@@ -86,7 +89,30 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000
+    port: 3010,
+    sourcemap: true
+  },
+  build: {
+    sourcemap: true,
+    sourcemapIgnoreList: (sourcefile) => {
+      // Ignore node_modules and vendor chunks in sourcemaps for smaller files
+      return sourcefile.includes('node_modules') || sourcefile.includes('vendor')
+    },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('vue') || id.includes('pinia') || id.includes('@vue') || id.includes('vue-demi')) {
+              return 'vendor'
+            }
+            return 'vendor'
+          }
+          if (id.includes('ouiData')) {
+            return 'data'
+          }
+        }
+      }
+    }
   },
   test: {
     environment: 'jsdom',

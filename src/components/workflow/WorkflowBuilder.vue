@@ -137,7 +137,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useSerialStore } from '../../stores/serialStore'
 import { useApStore } from '../../stores/apStore'
 import { useBleStore } from '../../stores/bleStore'
@@ -255,14 +255,16 @@ const closeWorkflow = () => {
 
 const waitForInput = (stepIndex) => {
   return new Promise((resolve) => {
-    const check = () => {
-      if (stepInputs.value[stepIndex] || aborted.value) {
-        resolve(stepInputs.value[stepIndex] || '')
-      } else {
-        setTimeout(check, 100)
-      }
-    }
-    check()
+    const unwatch = watch(
+      () => stepInputs.value[stepIndex],
+      (value) => {
+        if (value || aborted.value) {
+          unwatch()
+          resolve(value || '')
+        }
+      },
+      { immediate: true }
+    )
   })
 }
 
@@ -359,7 +361,17 @@ const executeWorkflow = async () => {
         }
 
         if (step.splitInput) {
-          const items = rawInput.split(',').map(s => s.trim()).filter(Boolean)
+          const items = rawInput
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean)
+            .filter(s => /^\d+$/.test(s))
+
+          if (items.length === 0) {
+            addLog(`Invalid input: only numbers allowed`, '⚠', 'text-amber-400')
+            continue
+          }
+
           addLog(`Input: ${items.length} values`, '✓', 'text-emerald-400')
           for (const item of items) {
             if (aborted.value) break
@@ -381,8 +393,9 @@ const executeWorkflow = async () => {
           continue
         }
 
-        cmd = cmd.replaceAll('{input}', rawInput)
-        addLog(`Input received: ${rawInput}`, '✓', 'text-emerald-400')
+        const sanitizedInput = rawInput.replace(/[;&|`$]/g, '')
+        cmd = cmd.replaceAll('{input}', sanitizedInput)
+        addLog(`Input received: ${sanitizedInput}`, '✓', 'text-emerald-400')
       }
 
       try {

@@ -1,4 +1,4 @@
-function escCsv(value: any): string {
+function escCsv(value: unknown): string {
     if (value === null || value === undefined) return ''
     let s = String(value)
     // Prevent Excel formula injection
@@ -121,5 +121,7 @@ export function downloadWigle(filename: string, content: string): void {
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  setTimeout(() => {
+    try { URL.revokeObjectURL(url) } catch (_) { /* ignore */ }
+  }, 1500)
 }

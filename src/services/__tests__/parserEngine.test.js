@@ -15,13 +15,14 @@ import { useApStore } from '../../stores/apStore'
 import { useBleStore } from '../../stores/bleStore'
 import { useDashboardStore } from '../../stores/dashboardStore'
 import { useProbeStore } from '../../stores/probeStore'
-import { parseLine, parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil, startParser, stopParser } from '../parserEngine.ts'
+import { parseLine, parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil, startParser, stopParser, resetCtxCache } from '../parserEngine.ts'
 
 describe('parseLine — ESP32 Marauder output parser', () => {
   let apStore, bleStore, dashStore, probeStore
 
   beforeEach(() => {
     setActivePinia(createPinia())
+    resetCtxCache()
     apStore = useApStore()
     bleStore = useBleStore()
     dashStore = useDashboardStore()
@@ -502,7 +503,7 @@ describe('parseLine — ESP32 Marauder output parser', () => {
 
   describe('resetParserState', () => {
     it('resets parser globals on disconnect', async () => {
-      const { resetParserState, parseLine } = await import('../parserEngine.ts')
+      const { resetParserState } = await import('../parserEngine.ts')
       parseLine('Index: 5')
       parseLine('BSSID: AA:BB:CC:11:22:33')
       expect(() => resetParserState()).not.toThrow()
@@ -513,6 +514,7 @@ describe('parseLine — ESP32 Marauder output parser', () => {
 describe('Demo generators', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    resetCtxCache()
   })
 
   describe('parseDemoAP', () => {

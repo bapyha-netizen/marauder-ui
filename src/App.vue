@@ -12,9 +12,9 @@
           <h1 class="text-base font-bold text-white tracking-tight">marauder-ui</h1>
         </div>
         <div class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
-          :class="serialStore.isConnected ? 'bg-emerald-500/10 text-emerald-400' : serialStore.reconnectAttempts > 0 ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'">
-          <span class="w-1.5 h-1.5 rounded-full" :class="serialStore.isConnected ? 'bg-emerald-400' : serialStore.reconnectAttempts > 0 ? 'bg-amber-400 animate-pulse' : 'bg-red-400'"></span>
-          {{ serialStore.isConnected ? 'Connected' : serialStore.reconnectAttempts > 0 ? `Reconnecting (${serialStore.reconnectAttempts})` : 'Disconnected' }}
+          :class="serialStore.isDemoMode ? 'bg-cyan-500/10 text-cyan-400' : serialStore.isConnected ? 'bg-emerald-500/10 text-emerald-400' : serialStore.reconnectAttempts > 0 ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'">
+          <span class="w-1.5 h-1.5 rounded-full" :class="serialStore.isDemoMode ? 'bg-cyan-400' : serialStore.isConnected ? 'bg-emerald-400' : serialStore.reconnectAttempts > 0 ? 'bg-amber-400 animate-pulse' : 'bg-red-400'"></span>
+          {{ serialStore.isDemoMode ? 'Demo' : serialStore.isConnected ? 'Connected' : serialStore.reconnectAttempts > 0 ? `Reconnecting (${serialStore.reconnectAttempts})` : 'Disconnected' }}
         </div>
         <AppActionBar />
       </div>
@@ -48,9 +48,14 @@
     <div class="flex-1 flex flex-col min-h-0 p-4 gap-3">
 
       <!-- Tabs -->
-      <nav class="flex space-x-1" role="tablist" aria-label="Main navigation">
+      <nav class="flex space-x-1" role="tablist" aria-label="Main navigation"
+        @keydown.left.prevent="cycleTab(-1)"
+        @keydown.right.prevent="cycleTab(1)">
         <button v-for="tab in tabs" :key="tab.id" @click="activeTab = tab.id"
-          role="tab" :aria-selected="activeTab === tab.id" :aria-label="tab.label"
+          role="tab"
+          :aria-selected="activeTab === tab.id"
+          :aria-label="tab.label"
+          :tabindex="activeTab === tab.id ? 0 : -1"
           class="px-3.5 py-1.5 text-xs font-medium rounded-lg transition-all duration-150"
           :class="activeTab === tab.id
             ? 'bg-indigo-600 text-white shadow-sm'
@@ -115,7 +120,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { defineAsyncComponent } from 'vue'
 import MobileBlocker from './components/MobileBlocker.vue'
 import PWAInstallPrompt from './components/PWAInstallPrompt.vue'
@@ -134,6 +139,7 @@ import { useDashboardStore } from './stores/dashboardStore'
 import { useProbeStore } from './stores/probeStore'
 import { parseLine, parseDemoAP, parseDemoBLE, startParser, stopParser } from './services/parserEngine'
 import { useToast } from './utils/toast'
+import { sanitizeText } from './utils/sanitize'
 
 const serialStore = useSerialStore()
 const apStore = useApStore()
@@ -157,8 +163,20 @@ const toastClass = (type) => {
 
 const isMobile = ref(false)
 const activeTab = ref('dashboard')
-const demoInterval = ref(null)
 let lastLength = 0
+
+let _demoInterval = null
+
+function _stopDemoInterval() {
+  if (_demoInterval !== null) {
+    clearInterval(_demoInterval)
+    _demoInterval = null
+  }
+}
+
+if (typeof import.meta !== 'undefined' && import.meta.hot) {
+  import.meta.hot.dispose(() => _stopDemoInterval())
+}
 
 const checkMobile = () => {
   const hasSerial = 'serial' in navigator
@@ -175,6 +193,19 @@ const tabs = computed(() => [
   { id: 'scenarios', label: 'Scenarios', icon: '⚡', badge: '' },
   { id: 'help', label: 'Help', icon: '❓', badge: '' },
 ])
+
+const cycleTab = (direction) => {
+  const list = tabs.value
+  if (!list.length) return
+  const currentIdx = list.findIndex(t => t.id === activeTab.value)
+  const nextIdx = ((currentIdx < 0 ? 0 : currentIdx) + direction + list.length) % list.length
+  activeTab.value = list[nextIdx].id
+  nextTick(() => {
+    const nav = document.querySelector('nav[role="tablist"]')
+    const nextTab = nav?.querySelector(`button[aria-label="${list[nextIdx].label}"]`)
+    nextTab?.focus()
+  })
+}
 
 onMounted(async () => {
   checkMobile()
@@ -196,7 +227,7 @@ onUnmounted(() => {
   dashStore.stopTick()
   window.removeEventListener('resize', checkMobile)
   window.removeEventListener('beforeunload', sendStop)
-  if (demoInterval.value) clearInterval(demoInterval.value)
+  _stopDemoInterval()
 })
 
 watch(() => serialStore.isConnected, (connected) => {
@@ -215,9 +246,9 @@ watch(() => serialStore.terminalOutput.length, (newLen, oldLen) => {
     for (let i = lastLength; i < lines.length; i++) {
       try {
         const raw = typeof lines[i] === 'string' ? lines[i] : lines[i].text || ''
-        parseLine(raw.replace(/<[^>]+>/g, ''))
+        parseLine(sanitizeText(raw, { html: true }))
       } catch (e) {
-        console.error('Parse error:', e, lines[i])
+        console.error('Parse error:', e)
       }
     }
     lastLength = lines.length
@@ -254,9 +285,10 @@ const toggleDemoMode = async () => {
     lastLength = 0
     serialStore.setTerminalOutput(await _loadDemoData())
     parseDemoAP(); parseDemoBLE()
-    demoInterval.value = setInterval(() => { parseDemoAP(); parseDemoBLE() }, 5000)
+    _stopDemoInterval()
+    _demoInterval = setInterval(() => { parseDemoAP(); parseDemoBLE() }, 5000)
   } else {
-    if (demoInterval.value) clearInterval(demoInterval.value)
+    _stopDemoInterval()
     serialStore.setTerminalOutput([])
     lastLength = 0
     dashStore.resetStats()

@@ -1,5 +1,3 @@
-import { escHtml } from './format'
-
 interface Station {
   id: number
   mac: string
@@ -77,32 +75,39 @@ export function generateDemoData(): Ap[] {
 
 export function generateDemoTerminalOutput(): Array<{ text: string; cls: string }> {
     const aps = generateDemoData()
-    const raw: string[] = [
-        '<span class="text-blue-400">ESP32 Marauder</span>',
-        '<span class="text-blue-400">By: justcallmekoko</span>',
-        '<span class="text-cyan-400">> scanall</span>',
-        '<span class="text-green-400">Scanning for APs and Stations. Stop with stopscan</span>',
-        ...aps.slice(0, 8).map(ap =>
-            `<span class="text-green-400">${ap.rssi} Ch: ${escHtml(ap.channel)} ${escHtml(ap.bssid)} ESSID: ${escHtml(ap.essid)}</span>`
-        ),
-        '<span class="text-cyan-400">> list -a</span>',
-        ...aps.slice(0, 10).map((ap, i) =>
-            `<span class="text-green-400">[${i}][CH:${escHtml(ap.channel)}] ${escHtml(ap.essid)} ${ap.rssi}</span>`
-        ),
-        '<span class="text-cyan-400">> sniffdeauth</span>',
-        '<span class="text-green-400">Starting Deauth sniff. Stop with stopscan</span>',
-        '<span class="text-red-400">-65 Ch: 6 AA:BB:CC:DD:EE:FF -> 11:22:33:44:55:66</span>',
-        '<span class="text-red-400">-72 Ch: 1 00:11:22:33:44:55 -> 66:77:88:99:AA:BB</span>',
-        '<span class="text-cyan-400">> sniffbt</span>',
-        '<span class="text-green-400">Starting Bluetooth scan. Stop with stopscan</span>',
-        '<span class="text-purple-400">-45 Device: iPhone 15 Pro</span>',
-        '<span class="text-purple-400">-62 Device: AirPods Pro</span>',
-        '<span class="text-purple-400">-38 Device: AA:BB:CC:DD:EE:FF</span>'
+    const out: Array<{ text: string; cls: string }> = [
+        { text: 'ESP32 Marauder', cls: 'text-blue-400' },
+        { text: 'By: justcallmekoko', cls: 'text-blue-400' },
+        { text: '> scanall', cls: 'text-cyan-400' },
+        { text: 'Scanning for APs and Stations. Stop with stopscan', cls: 'text-green-400' }
     ]
-
-    raw.push(...aps.slice(0, 3).map((ap, i) =>
-        `<span class="text-yellow-400">${i}: ap: ${escHtml(ap.bssid)} -> sta: ${escHtml(generateMAC())}</span>`
-    ))
-
-    return raw.map(html => ({ text: html, cls: '' }))
+    for (const ap of aps.slice(0, 8)) {
+        out.push({
+            text: `${ap.rssi} Ch: ${ap.channel} ${ap.bssid} ESSID: ${ap.essid}`,
+            cls: 'text-green-400'
+        })
+    }
+    out.push({ text: '> list -a', cls: 'text-cyan-400' })
+    aps.slice(0, 10).forEach((ap, i) => {
+        out.push({
+            text: `[${i}][CH:${ap.channel}] ${ap.essid} ${ap.rssi}`,
+            cls: 'text-green-400'
+        })
+    })
+    out.push({ text: '> sniffdeauth', cls: 'text-cyan-400' })
+    out.push({ text: 'Starting Deauth sniff. Stop with stopscan', cls: 'text-green-400' })
+    out.push({ text: '-65 Ch: 6 AA:BB:CC:DD:EE:FF -> 11:22:33:44:55:66', cls: 'text-red-400' })
+    out.push({ text: '-72 Ch: 1 00:11:22:33:44:55 -> 66:77:88:99:AA:BB', cls: 'text-red-400' })
+    out.push({ text: '> sniffbt', cls: 'text-cyan-400' })
+    out.push({ text: 'Starting Bluetooth scan. Stop with stopscan', cls: 'text-green-400' })
+    out.push({ text: '-45 Device: iPhone 15 Pro', cls: 'text-purple-400' })
+    out.push({ text: '-62 Device: AirPods Pro', cls: 'text-purple-400' })
+    out.push({ text: '-38 Device: AA:BB:CC:DD:EE:FF', cls: 'text-purple-400' })
+    aps.slice(0, 3).forEach((_ap, i) => {
+        out.push({
+            text: `${i}: ap: ${generateMAC()} -> sta: ${generateMAC()}`,
+            cls: 'text-yellow-400'
+        })
+    })
+    return out
 }

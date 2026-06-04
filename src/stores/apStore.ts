@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { shallowRef, triggerRef, computed, watch } from 'vue'
+import { shallowRef, triggerRef, computed, watch, ref } from 'vue'
 import { debouncedSave, loadStore, clearPersistedStore } from '../utils/persist'
 import type { AccessPoint, Station } from '../types'
 
@@ -20,28 +20,21 @@ export const useApStore = defineStore('ap', () => {
   const accessPoints = shallowRef<Map<string, APOpaque>>(new Map())
 
   const sortedAPs = computed(() => {
+    void accessPoints.value
     return Array.from(accessPoints.value.values())
       .sort((a, b) => (b.rssi || -999) - (a.rssi || -999))
   })
 
   const apCount = computed(() => accessPoints.value.size)
 
-  const totalStations = computed(() => {
-    let count = 0
-    accessPoints.value.forEach(ap => {
-      count += (ap.stations?.length || 0)
-    })
-    return count
-  })
+  const _totalStations = shallowRef(0)
+  const _apByChannel = shallowRef<Record<number, number>>({})
+  const _signalSum = shallowRef(0)
+  const _signalCount = shallowRef(0)
+  const avgSignal = computed(() => _signalCount.value > 0 ? Math.round(_signalSum.value / _signalCount.value) : 0)
 
-  const apByChannel = computed(() => {
-    const ch: Record<number, number> = {}
-    accessPoints.value.forEach(ap => {
-      const c = ap.channel || 0
-      ch[c] = (ch[c] || 0) + 1
-    })
-    return ch
-  })
+  const totalStations = computed(() => _totalStations.value)
+  const apByChannel = computed(() => _apByChannel.value)
 
   const _byBssid = shallowRef<Map<string, string>>(new Map())
   const _byIndex = shallowRef<Map<number, string>>(new Map())
@@ -49,35 +42,191 @@ export const useApStore = defineStore('ap', () => {
   function _rebuildIndexes() {
     const bssidMap = new Map<string, string>()
     const indexMap = new Map<number, string>()
-    accessPoints.value.forEach((ap, key) => {
-      if (ap.bssid) bssidMap.set(ap.bssid.toUpperCase(), key)
-      if (ap.index !== undefined && ap.index !== null) indexMap.set(ap.index, key)
-    })
+    for (const [key, ap] of accessPoints.value.entries()) {
+      if (ap.bssid) {
+        bssidMap.set(ap.bssid.toUpperCase(), key)
+      }
+      if (ap.index !== undefined && ap.index !== null) {
+        indexMap.set(ap.index, key)
+      }
+    }
     _byBssid.value = bssidMap
     _byIndex.value = indexMap
   }
 
-  function _updateIndexesForKey(key: string, ap: APOpaque) {
-    if (ap.bssid) _byBssid.value.set(ap.bssid.toUpperCase(), key)
-    else _byBssid.value.delete(ap.bssid?.toUpperCase() || '')
+  function _validateAndFixIndexes() {
+    // D-03: Validate and fix orphaned or conflicting indexes
+    const indexMap = new Map(_byIndex.value)
+    const bssidMap = new Map(_byBssid.value)
+    const usedIndexes = new Set<number>()
+    const fixedAPs = new Map<string, APOpaque>()
+    
+    // First pass: find all valid index references
+    for (const [key, ap] of accessPoints.value.entries()) {
+      if (ap.index !== undefined && ap.index !== null) {
+        if (indexMap.get(ap.index) !== key) {
+          // This index points to a different key or is missing
+          indexMap.delete(ap.index)
+          fixedAPs.set(key, { ...ap, index: undefined })
+        } else {
+          usedIndexes.add(ap.index)
+        }
+      }
+    }
+    
+    // Second pass: resolve conflicts and fix orphaned references
+    for (const [key, ap] of accessPoints.value.entries()) {
+      if (ap.index !== undefined && ap.index !== null) {
+        if (usedIndexes.has(ap.index) && indexMap.get(ap.index) !== key) {
+          // Index conflict found, find next available index
+          let newIndex = 0
+          while (usedIndexes.has(newIndex)) {
+            newIndex++
+          }
+          ap.index = newIndex
+          usedIndexes.add(newIndex)
+          indexMap.set(newIndex, key)
+          fixedAPs.set(key, ap)
+        }
+      }
+    }
+    
+    // Apply fixes
+    if (fixedAPs.size > 0) {
+      for (const [key, ap] of fixedAPs) {
+        accessPoints.value.set(key, ap)
+      }
+      _rebuildIndexes()
+      return fixedAPs.size
+    }
+    
+    return 0
+  }
 
-    if (ap.index !== undefined && ap.index !== null) _byIndex.value.set(ap.index, key)
-    else _byIndex.value.delete(ap.index as number)
+  function _updateIndexesForKey(key: string, ap: APOpaque) {
+    const newBssid = new Map(_byBssid.value)
+    const newIndex = new Map(_byIndex.value)
+    // Q-10: always delete the previous bssid mapping for this key to avoid
+    // stale entries when an AP loses its BSSID. Look up the existing entry
+    // first so we know which key to drop.
+    const prevAp = accessPoints.value.get(key)
+    if (prevAp?.bssid) {
+      newBssid.delete(prevAp.bssid.toUpperCase())
+    }
+    if (prevAp?.index !== undefined && prevAp?.index !== null) {
+      newIndex.delete(prevAp.index)
+    }
+    if (ap.bssid) {
+      newBssid.set(ap.bssid.toUpperCase(), key)
+    }
+    if (ap.index !== undefined && ap.index !== null) {
+      // D-03: Check for index conflicts and resolve them
+      const existingKeyForIndex = newIndex.get(ap.index)
+      if (existingKeyForIndex && existingKeyForIndex !== key) {
+        // Another AP already has this index, resolve the conflict
+        const conflictingAp = accessPoints.value.get(existingKeyForIndex)
+        if (conflictingAp) {
+          // Find the next available index
+          let newIndexValue = ap.index
+          while (newIndex.has(newIndexValue)) {
+            newIndexValue++
+          }
+          // Update the conflicting AP to use the new index
+          conflictingAp.index = newIndexValue
+          _updateIndexesForKey(existingKeyForIndex, conflictingAp)
+        }
+      }
+      newIndex.set(ap.index, key)
+    }
+    _byBssid.value = newBssid
+    _byIndex.value = newIndex
   }
 
   function _removeIndexesForKey(key: string) {
+    // D-03: always scrub the index maps for the given key, even if the AP
+    // record is no longer in the main map. The caller is signaling "this
+    // key is gone"; partial cleanup leaves stale lookups behind.
     const ap = accessPoints.value.get(key)
-    if (ap) {
-      if (ap.bssid) _byBssid.value.delete(ap.bssid.toUpperCase())
-      if (ap.index !== undefined && ap.index !== null) _byIndex.value.delete(ap.index)
+    const prevBssid = ap?.bssid
+    const prevIndex = ap?.index
+    const newBssid = new Map(_byBssid.value)
+    const newIndex = new Map(_byIndex.value)
+    if (prevBssid) newBssid.delete(prevBssid.toUpperCase())
+    if (prevIndex !== undefined && prevIndex !== null) newIndex.delete(prevIndex)
+    // Defensive: also drop any map entries that point back to this key.
+    for (const [b, k] of newBssid.entries()) {
+      if (k === key) newBssid.delete(b)
+    }
+    for (const [i, k] of newIndex.entries()) {
+      if (k === key) newIndex.delete(i)
+    }
+    _byBssid.value = newBssid
+    _byIndex.value = newIndex
+  }
+
+  function _isValidRssi(rssi: unknown): rssi is number {
+    return typeof rssi === 'number' && !Number.isNaN(rssi)
+  }
+
+  function _recomputeStats() {
+    let total = 0
+    const ch: Record<number, number> = {}
+    let rssiSum = 0
+    let rssiCount = 0
+    for (const ap of accessPoints.value.values()) {
+      total += (ap.stations?.length || 0)
+      const c = ap.channel || 0
+      if (c !== 0) ch[c] = (ch[c] || 0) + 1
+      if (_isValidRssi(ap.rssi)) {
+        rssiSum += ap.rssi
+        rssiCount++
+      }
+    }
+    _totalStations.value = total
+    _apByChannel.value = ch
+    _signalSum.value = rssiSum
+    _signalCount.value = rssiCount
+  }
+
+  function _statsForAP(ap: APOpaque) {
+    return {
+      stations: ap.stations?.length || 0,
+      channel: ap.channel || 0,
+      rssi: _isValidRssi(ap.rssi) ? ap.rssi : null
     }
   }
 
-  const avgSignal = computed(() => {
-    const aps = Array.from(accessPoints.value.values()).filter(ap => ap.rssi)
-    if (!aps.length) return 0
-    return Math.round(aps.reduce((s, ap) => s + (ap.rssi || 0), 0) / aps.length)
-  })
+  function _applyStatsDelta(prev: ReturnType<typeof _statsForAP> | null, next: ReturnType<typeof _statsForAP> | null) {
+    if (prev?.stations !== next?.stations) {
+      const delta = (next?.stations || 0) - (prev?.stations || 0)
+      _totalStations.value = Math.max(0, _totalStations.value + delta)
+    }
+    if (prev?.channel !== next?.channel) {
+      const ch = { ..._apByChannel.value }
+      if (prev && prev.channel !== 0) {
+        ch[prev.channel] = Math.max(0, (ch[prev.channel] || 0) - 1)
+        if (ch[prev.channel] === 0) delete ch[prev.channel]
+      }
+      if (next && next.channel !== 0) {
+        ch[next.channel] = (ch[next.channel] || 0) + 1
+      }
+      _apByChannel.value = ch
+    }
+    if ((prev?.rssi ?? null) !== (next?.rssi ?? null)) {
+      if (prev && prev.rssi != null) {
+        _signalSum.value -= prev.rssi
+        _signalCount.value = Math.max(0, _signalCount.value - 1)
+      }
+      if (next && next.rssi != null) {
+        _signalSum.value += next.rssi
+        _signalCount.value += 1
+      }
+    }
+  }
+
+  function _removeAPStats(ap: APOpaque) {
+    _applyStatsDelta(_statsForAP(ap), null)
+  }
 
   function _findExisting(ap: Partial<APOpaque>): string | null {
     if (ap.bssid) {
@@ -90,23 +239,27 @@ export const useApStore = defineStore('ap', () => {
       const key = _byIndex.value.get(ap.index)
       if (key) return key
     }
-    if (ap.channel !== undefined && ap.essid) {
-      const fk = `${ap.channel}-${ap.essid}`
-      if (accessPoints.value.has(fk)) return fk
-    }
     return null
   }
 
   const MAX_APS = 1000
 
+  function _newAnonymousKey(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return `_ap:${crypto.randomUUID()}`
+    }
+    return `_ap:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  }
+
   function updateOrAddAP(ap: Partial<APOpaque>) {
     const existingKey = _findExisting(ap)
     const existing = existingKey ? accessPoints.value.get(existingKey) : null
     const newKey = ap.bssid ? ap.bssid.toUpperCase()
-      : existingKey || `_ap:${ap.channel ?? '?'}:${ap.essid || ''}:${ap.index ?? Date.now()}`
+      : existingKey || _newAnonymousKey()
     const now = new Date()
     if (existing && existingKey === newKey) {
-      Object.assign(existing, {
+      const merged: APOpaque = {
+        ...existing,
         index: ap.index ?? existing.index,
         essid: ap.essid || existing.essid,
         bssid: ap.bssid || existing.bssid,
@@ -116,16 +269,21 @@ export const useApStore = defineStore('ap', () => {
         isHidden: ap.isHidden ?? existing.isHidden ?? false,
         isSelected: ap.isSelected ?? existing.isSelected ?? false,
         lastSeen: ap.lastSeen || now,
-        stations: ap.stations || existing.stations,
+        stations: ap.stations
+          ? [...existing.stations, ...ap.stations].filter((s, i, arr) =>
+              arr.findIndex(x => x.mac === s.mac) === i
+            )
+          : existing.stations,
         vendor: ap.vendor || existing.vendor || '',
         frameCount: (existing.frameCount || 0) + (ap.frameCount || 0)
-      })
-      _updateIndexesForKey(newKey, existing)
-      if (existing.rssi != null) {
-        existing.rssiHistory.push(existing.rssi)
-        if (existing.rssiHistory.length > 20) existing.rssiHistory.shift()
       }
-      triggerRef(accessPoints)
+      if (existing.rssi != null) {
+        const newHistory = [...existing.rssiHistory, existing.rssi]
+        if (newHistory.length > 20) newHistory.shift()
+        merged.rssiHistory = newHistory
+      }
+      _updateIndexesForKey(newKey, merged)
+      accessPoints.value.set(newKey, merged)
       return
     }
     const newAP: APOpaque = {
@@ -143,19 +301,12 @@ export const useApStore = defineStore('ap', () => {
       frameCount: (existing?.frameCount || 0) + (ap.frameCount || 0),
       rssiHistory: existing?.rssiHistory ? [...existing.rssiHistory] : []
     }
-    if (newAP.rssi != null) {
-      newAP.rssiHistory.push(newAP.rssi)
-      if (newAP.rssiHistory.length > 20) newAP.rssiHistory.shift()
-    }
-    if (existingKey && existingKey !== newKey) {
-      _removeIndexesForKey(existingKey)
-      accessPoints.value.delete(existingKey)
-    }
-    accessPoints.value.set(newKey, newAP)
     _updateIndexesForKey(newKey, newAP)
     if (accessPoints.value.size > MAX_APS) {
       const oldest = accessPoints.value.keys().next().value
       if (oldest) {
+        const oldestAp = accessPoints.value.get(oldest)
+        if (oldestAp) _removeAPStats(oldestAp)
         _removeIndexesForKey(oldest)
         accessPoints.value.delete(oldest)
       }
@@ -173,8 +324,25 @@ export const useApStore = defineStore('ap', () => {
     } else {
       stations.push({ ...station, lastSeen: new Date() })
     }
-    stations.sort((a, b) => (a.id || 0) - (b.id || 0))
-    Object.assign(ap, { stations })
+    // D-04: station id may legitimately be 0; use stable sort by ID with fallback
+    // to insertion order. Pre-compute fallback indices to avoid O(n²) performance.
+    const stationsWithFallback = stations.map((station, index) => ({
+      ...station,
+      _fallbackIndex: index
+    }))
+    stationsWithFallback.sort((a, b) => {
+      const aId = a.id ?? a._fallbackIndex
+      const bId = b.id ?? b._fallbackIndex
+      return aId - bId
+    })
+    const updatedStations = stationsWithFallback.map(s => ({ 
+      id: s.id, 
+      mac: s.mac, 
+      vendor: s.vendor, 
+      lastSeen: s.lastSeen 
+    }))
+    const updated: APOpaque = { ...ap, stations: updatedStations }
+    accessPoints.value.set(apKey, updated)
     triggerRef(accessPoints)
   }
 
@@ -182,14 +350,24 @@ export const useApStore = defineStore('ap', () => {
     accessPoints.value = new Map()
     _byBssid.value = new Map()
     _byIndex.value = new Map()
+    _totalStations.value = 0
+    _apByChannel.value = {}
+    _signalSum.value = 0
+    _signalCount.value = 0
     clearPersistedStore(PERSIST_KEY)
   }
 
   function clearSelected() {
+    // Use immutable updates for consistency
+    const updates: Array<[string, APOpaque]> = []
     for (const [key, ap] of accessPoints.value.entries()) {
-      accessPoints.value.set(key, { ...ap, isSelected: false })
+      if (ap.isSelected) {
+        updates.push([key, { ...ap, isSelected: false }])
+      }
     }
-    triggerRef(accessPoints)
+    for (const [key, updatedAp] of updates) {
+      accessPoints.value.set(key, updatedAp)
+    }
   }
 
   function updateAP(index: number, data: Partial<APOpaque>) {
@@ -197,9 +375,9 @@ export const useApStore = defineStore('ap', () => {
     if (!key) return
     const ap = accessPoints.value.get(key)
     if (!ap) return
-    Object.assign(ap, data)
-    _updateIndexesForKey(key, ap)
-    triggerRef(accessPoints)
+    const next: APOpaque = { ...ap, ...data }
+    _updateIndexesForKey(key, next)
+    accessPoints.value.set(key, next)
   }
 
   function removeOldAPs(maxAgeMs = 300000) {
@@ -212,7 +390,9 @@ export const useApStore = defineStore('ap', () => {
         changed = true
       }
     }
-    if (changed) triggerRef(accessPoints)
+    if (changed) {
+      // Sorted APs are computed, no need to manually update
+    }
   }
 
   function exportData() {
@@ -248,6 +428,7 @@ export const useApStore = defineStore('ap', () => {
 
   watch(accessPoints, (map) => {
     _rebuildIndexes()
+    _recomputeStats()
     const items: Record<string, unknown>[] = []
     for (const [, ap] of map.entries()) {
       items.push({ ...ap })
@@ -259,30 +440,42 @@ export const useApStore = defineStore('ap', () => {
     const saved = await loadStore(PERSIST_KEY)
     if (!saved || saved.length === 0) {
       _rebuildIndexes()
+      _recomputeStats()
       return
     }
     const current = accessPoints.value
     let changed = false
     for (const ap of saved) {
-      const key = (ap.bssid || ap.id) as string
+      if (!ap || typeof ap !== 'object') continue
+      const key = (typeof ap.bssid === 'string' ? ap.bssid : null) || (typeof ap.id === 'string' ? ap.id : null)
       if (!key) continue
       if (current.has(key)) continue
+      const stations = ap.stations && Array.isArray(ap.stations)
+        ? ap.stations.map(s => ({
+            ...s,
+            lastSeen: s.lastSeen ? new Date(s.lastSeen) : new Date()
+          }))
+        : []
       const restored: APOpaque = {
-        ...(ap as any),
+        ...(ap as unknown as APOpaque),
         lastSeen: ap.lastSeen ? new Date(ap.lastSeen as string) : new Date(),
-        stations: (ap.stations as any[])?.map(s => ({
-          ...s,
-          lastSeen: s.lastSeen ? new Date(s.lastSeen) : new Date()
-        })) || [],
-        rssiHistory: ap.rssiHistory ? [...(ap.rssiHistory as number[])] : [],
-        frameCount: (ap.frameCount as number) || 0
+        stations,
+        rssiHistory: Array.isArray(ap.rssiHistory) ? [...ap.rssiHistory] : [],
+        frameCount: typeof ap.frameCount === 'number' ? ap.frameCount : 0
       }
-      delete (restored as any).id
+      delete (restored as unknown as Record<string, unknown>).id
       current.set(key, restored)
       changed = true
     }
     if (changed) _rebuildIndexes()
-    if (changed) triggerRef(accessPoints)
+    if (changed) {
+      // D-03: Validate and fix any orphaned indexes after hydration
+      const fixedCount = _validateAndFixIndexes()
+      if (fixedCount > 0) {
+        console.log(`Fixed ${fixedCount} orphaned indexes during hydration`)
+      }
+      _recomputeStats()
+    }
   }
 
   return {

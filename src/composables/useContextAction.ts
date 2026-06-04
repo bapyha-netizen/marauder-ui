@@ -1,4 +1,4 @@
-import { computed } from 'vue'
+import { computed, type ComputedRef } from 'vue'
 import { useSerialStore } from '../stores/serialStore'
 import { getCommandMeta, SEVERITY } from '../services/commandMeta'
 import { getPrereqState } from '../utils/actionDispatcher'
@@ -16,7 +16,13 @@ interface CanRunResult {
   severity?: string
 }
 
-export function useContextAction(serialStoreRef: any = null) {
+// Q-14: use the actual store's return type instead of a custom `any`-ish
+// stand-in. Accepting only the real shape means a missing field becomes a
+// compile error rather than a runtime undefined read.
+type SerialStore = ReturnType<typeof useSerialStore>
+type SerialStoreLike = Pick<SerialStore, 'isConnected'>
+
+export function useContextAction(serialStoreRef: SerialStoreLike | null = null) {
   const serial = serialStoreRef || useSerialStore()
 
   function isConnected(): boolean {
@@ -71,7 +77,7 @@ export function useContextAction(serialStoreRef: any = null) {
   }
 
   return {
-    isConnected: computed(() => isConnected()),
+    isConnected: computed(() => serial?.isConnected === true),
     canRun,
     btnState,
     btnClass

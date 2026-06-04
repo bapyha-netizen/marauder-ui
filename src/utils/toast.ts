@@ -14,6 +14,12 @@ const _lastToastOrder: string[] = []
 const _MAX_TRACKED = 100
 
 export function useToast() {
+  /**
+   * Show a toast. Returns the toast id, or undefined if the call was
+   * deduped (same message shown within 500ms). Callers can pass the id to
+   * `remove(id)` to dismiss a toast early — useful for "running..." / "OK"
+   * pairs that should be replaced instead of stacked.
+   */
   function show(message: string, type: string = 'info', duration: number = 3000): number | undefined {
     const now = Date.now()
     const last = _lastToast.get(message) || 0

@@ -7,8 +7,9 @@
         <span v-if="selectedCount" class="badge-green">{{ selectedCount }} selected</span>
       </div>
       <div class="flex items-center space-x-2">
-        <input v-model="search" placeholder="Search..." class="input w-36 lg:w-48 text-xs">
-        <select v-model="sortBy" class="input w-auto text-xs py-1">
+        <label class="sr-only" for="ap-sort">Sort access points by</label>
+        <input v-model="search" type="search" placeholder="Search..." class="input w-36 lg:w-48 text-xs" aria-label="Search access points">
+        <select id="ap-sort" v-model="sortBy" class="input w-auto text-xs py-1" aria-label="Sort access points by">
           <option value="rssi">Signal</option>
           <option value="essid">Name</option>
           <option value="channel">Channel</option>
@@ -27,27 +28,25 @@
       <table class="w-full text-xs">
         <thead class="bg-slate-800 sticky top-0 z-10">
           <tr>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-12"><input type="checkbox" @click.stop="toggleSelectAll" :checked="allSelected" :disabled="!apStore.apCount" class="accent-indigo-500 cursor-pointer disabled:opacity-40" title="Select all"></th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-10">#</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider">ESSID</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-12">CH</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-16">RSSI</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-20">Signal</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-36">BSSID</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-20">Vendor</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-10">STA</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-12">Enc</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-16">Seen</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-24">Actions</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-12"><input type="checkbox" @click.stop="toggleSelectAll" :checked="allSelected" :disabled="!apStore.apCount" class="accent-indigo-500 cursor-pointer disabled:opacity-40" title="Select all" aria-label="Select all"></th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-10">#</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider">ESSID</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-12">CH</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-16">RSSI</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-20">Signal</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-36">BSSID</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-20">Vendor</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-10">STA</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-12">Enc</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-16">Seen</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-24">Actions</th>
           </tr>
         </thead>
         <tbody>
           <template v-for="ap in filteredAPs" :key="ap.bssid">
             <tr class="border-t border-slate-700/30 hover:bg-slate-700/30 cursor-pointer transition-colors"
               :class="ap.isSelected ? 'bg-indigo-500/10' : ''"
-              tabindex="0"
-              @click="toggleExpand(ap.bssid)"
-              @keydown.enter.space.prevent="toggleExpand(ap.bssid)">
+              @click="toggleExpand(ap.bssid)">
               <td class="px-3 py-2" @click.stop>
                 <input type="checkbox" :checked="ap.isSelected" @change="toggleSelect(ap)" :disabled="!ctx.isConnected.value" class="accent-indigo-500 cursor-pointer disabled:opacity-40" :title="ap.isSelected ? 'Deselect' : 'Select'">
               </td>
@@ -57,7 +56,7 @@
                   <span class="font-medium text-slate-200">{{ ap.essid }}</span>
                   <span v-if="ap.isSelected" class="badge-green">sel</span>
                   <span v-if="ap.isHidden" class="badge-amber">hidden</span>
-                  <button v-if="ap.essid && ap.essid !== '(hidden)'" @click.stop="copyEssid(ap)" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy SSID">
+                  <button v-if="ap.essid && ap.essid !== '(hidden)'" @click.stop="copyEssid(ap)" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy SSID" aria-label="Copy SSID">
                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                   </button>
                 </div>
@@ -73,7 +72,7 @@
               <td class="px-3 py-2 font-mono text-slate-400 text-[11px]">
                 <div class="flex items-center space-x-1.5">
                   <span>{{ ap.bssid }}</span>
-                  <button @click.stop="copyBssid(ap)" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy BSSID">
+                  <button @click.stop="copyBssid(ap)" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy BSSID" aria-label="Copy BSSID">
                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                   </button>
                 </div>
@@ -86,10 +85,10 @@
               <td class="px-3 py-2 text-slate-500">{{ fmtTimeRelative(ap.lastSeen) }}</td>
               <td class="px-3 py-2" @click.stop>
                 <div class="flex items-center space-x-1">
-                  <button v-if="ap.index !== undefined" @click="runDispatched(`info -a ${ap.index}`, `Info ${ap.essid}`, ap.bssid)" :disabled="!ctx.isConnected.value" :title="ctx.btnState('info -a 0').title" class="text-slate-500 hover:text-cyan-400 transition-colors disabled:opacity-30" title="Get detailed info">
+                  <button v-if="ap.index !== undefined" @click="runDispatched(`info -a ${ap.index}`, `Info ${ap.essid}`, ap.bssid)" :disabled="!ctx.isConnected.value" :title="ctx.btnState('info -a 0').title" class="text-slate-500 hover:text-cyan-400 transition-colors disabled:opacity-30" title="Get detailed info" aria-label="Get detailed info">
                     <span class="text-xs">ℹ</span>
                   </button>
-                  <button v-if="ap.index !== undefined && ap.isSelected" @click="runDispatched('attack -t deauth', `Deauth ${ap.essid}`, ap.bssid, { destructive: true })" :disabled="!ctx.isConnected.value" :title="ctx.btnState('attack -t deauth').title" class="text-red-400 hover:text-red-300 transition-colors disabled:opacity-30" title="Deauth this AP">
+                  <button v-if="ap.index !== undefined && ap.isSelected" @click="runDispatched('attack -t deauth', `Deauth ${ap.essid}`, ap.bssid, { destructive: true })" :disabled="!ctx.isConnected.value" :title="ctx.btnState('attack -t deauth').title" class="text-red-400 hover:text-red-300 transition-colors disabled:opacity-30" title="Deauth this AP" aria-label="Deauth this AP">
                     <span class="text-xs">⚡</span>
                   </button>
                 </div>
@@ -103,7 +102,7 @@
                     <span class="font-mono text-slate-300">{{ sta.mac }}</span>
                     <span v-if="sta.vendor" class="text-slate-500">({{ sta.vendor }})</span>
                     <span class="text-slate-600">{{ fmtTimeRelative(sta.lastSeen) }}</span>
-                    <button @click="copyText(sta.mac, 'Station MAC')" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy MAC">
+                    <button @click="copyText(sta.mac, 'Station MAC')" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy MAC" aria-label="Copy station MAC">
                       <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                     </button>
                   </div>
@@ -137,7 +136,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import { useSerialStore } from '../../stores/serialStore'
 import { useApStore } from '../../stores/apStore'
 import { signalClass, fmtTimeRelative } from '../../utils/format'
@@ -207,16 +206,16 @@ const filteredAPs = computed(() => {
       (ap.bssid || '').toLowerCase().includes(q)
     )
   }
-  if (sortBy.value !== 'rssi') {
-    list = [...list].sort((a, b) => {
-      switch (sortBy.value) {
-        case 'essid': return (a.essid || '').localeCompare(b.essid || '')
-        case 'channel': return (a.channel || 0) - (b.channel || 0)
-        case 'stations': return (b.stations?.length || 0) - (a.stations?.length || 0)
-        default: return 0
-      }
-    })
-  }
+    if (sortBy.value !== 'rssi') {
+      list = [...list].sort((a, b) => {
+        switch (sortBy.value) {
+          case 'essid': return (a.essid || '').localeCompare(b.essid || '')
+          case 'channel': return (Number(a.channel) || 0) - (Number(b.channel) || 0)
+          case 'stations': return (a.stations?.length || 0) - (b.stations?.length || 0)
+          default: return 0
+        }
+      })
+    }
   return list
 })
 
@@ -231,16 +230,18 @@ const toggleSelect = async (ap) => {
     toastShow('AP has no index — run "list -a" first', 'warning')
     return
   }
+  const prevSelected = ap.isSelected
+  apStore.updateAP(ap.index, { isSelected: !prevSelected })
   try {
     await runAction({
       cmd: `select -a ${ap.index}`,
-      label: ap.isSelected ? `Deselect ${ap.essid}` : `Select ${ap.essid}`,
-      icon: ap.isSelected ? '⊘' : '✅',
+      label: prevSelected ? `Deselect ${ap.essid}` : `Select ${ap.essid}`,
+      icon: prevSelected ? '⊘' : '✅',
       target: ap.bssid,
       options: { confirm: false }
     })
-    apStore.updateAP(ap.index, { isSelected: !ap.isSelected })
   } catch (e) {
+    apStore.updateAP(ap.index, { isSelected: prevSelected })
     toastShow(`Select failed: ${e.message}`, 'error')
   }
 }
@@ -307,6 +308,7 @@ const showConfirm = (payload) => {
 const executeAction = async (payload) => {
   try {
     await runAction({ ...payload, options: { confirm: false } })
+    if (payload.cmd.startsWith('clearlist')) toastShow('AP list cleared', 'success')
   } catch (e) {
     toastShow(`Failed: ${e.message}`, 'error')
   }
@@ -331,12 +333,14 @@ const handleClear = () => {
 }
 
 const sparklinePoints = (history) => {
-  if (!history || history.length < 2) return ''
+  if (!history || !Array.isArray(history) || history.length < 2) return ''
+  const validHistory = history.filter(v => v != null && !isNaN(v) && isFinite(v))
+  if (validHistory.length < 2) return ''
   const w = 40, h = 16, pad = 1
-  const min = Math.min(...history), max = Math.max(...history)
+  const min = Math.min(...validHistory), max = Math.max(...validHistory)
   const range = max - min || 1
-  const xStep = (w - pad * 2) / (history.length - 1)
-  return history.map((v, i) => {
+  const xStep = (w - pad * 2) / (validHistory.length - 1)
+  return validHistory.map((v, i) => {
     const x = pad + i * xStep
     const y = pad + (1 - (v - min) / range) * (h - pad * 2)
     return `${x.toFixed(1)},${y.toFixed(1)}`

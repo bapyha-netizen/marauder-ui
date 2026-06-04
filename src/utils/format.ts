@@ -1,9 +1,7 @@
-export const escHtml = (s: any): string => String(s)
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#039;')
+// escHtml was removed: Vue's {{ }} interpolation auto-escapes, so the explicit
+// escape helper was only used by demoData.ts (which now uses text + cls
+// instead of HTML). If you ever need to inject untrusted HTML, prefer
+// v-html with a sanitized payload or use a dedicated sanitizer.
 
 export const signalClass = (rssi: number | null | undefined): string => {
   if (rssi === null || rssi === undefined) return 'text-slate-500'
@@ -21,7 +19,8 @@ export const dotClass = (rssi: number | null | undefined): string => {
 
 export const fmtTimeRelative = (t: string | Date | number | null | undefined): string => {
   if (!t) return ''
-  const diff = Math.max(0, Math.floor((Date.now() - new Date(t).getTime()) / 1000))
+  const diff = Math.floor((Date.now() - new Date(t).getTime()) / 1000)
+  if (diff <= 0) return 'now'
   if (diff < 60) return `${diff}s`
   if (diff < 3600) return `${Math.floor(diff / 60)}m`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h`

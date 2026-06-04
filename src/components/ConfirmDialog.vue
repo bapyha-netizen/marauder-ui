@@ -6,7 +6,8 @@
         @click.self="onCancel"
         role="alertdialog"
         aria-modal="true"
-        :aria-labelledby="titleId">
+        :aria-labelledby="titleId"
+        :aria-describedby="bodyId">
         <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
         <div class="relative bg-slate-800 border-2 rounded-2xl shadow-2xl max-w-md w-full p-5"
           :class="borderClass">
@@ -17,7 +18,7 @@
             </div>
             <div class="flex-1 min-w-0">
               <h3 :id="titleId" class="text-sm font-semibold text-slate-100">{{ title }}</h3>
-              <div class="mt-1 text-xs text-slate-400 space-y-1">
+              <div :id="bodyId" class="mt-1 text-xs text-slate-400 space-y-1">
                 <p v-for="(line, i) in bodyLines" :key="i">{{ line }}</p>
               </div>
             </div>
@@ -63,6 +64,11 @@ const props = defineProps({
 const emit = defineEmits(['confirm', 'cancel'])
 const cancelBtn = ref(null)
 const titleId = `confirm-title-${Math.random().toString(36).slice(2, 8)}`
+const bodyId = `confirm-body-${Math.random().toString(36).slice(2, 8)}`
+// A-11: remember which element had focus when the dialog opened so we can
+// restore it on close. Keyboard users rely on this to land back where they
+// were before the modal interrupted them.
+let _previouslyFocused = null
 
 const bodyLines = computed(() => {
   if (Array.isArray(props.body)) return props.body
@@ -100,8 +106,15 @@ const confirmClass = computed(() => {
 
 watch(() => props.show, async (s) => {
   if (s) {
+    // U-08: autofocus the cancel button so accidental Enter keeps the
+    // destructive action opt-in. Restoring focus to the trigger is a
+    // standard a11y expectation.
+    _previouslyFocused = document.activeElement || null
     await nextTick()
     cancelBtn.value?.focus()
+  } else if (_previouslyFocused && document.contains(_previouslyFocused)) {
+    _previouslyFocused.focus()
+    _previouslyFocused = null
   }
 })
 

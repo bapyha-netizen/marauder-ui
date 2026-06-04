@@ -1,9 +1,9 @@
 import { sanitizeText } from '../utils/sanitize'
+import { META } from './firmwareProfiles/marauderV1'
 
 const DEFAULT_CMD_TIMEOUT_MS = 15000
 const SEQUENCE_STEP_TIMEOUT_MS = 5000
 const SEQUENCE_STEP_BUFFER_MS = 5000
-const PROMPT_RE = /^>\s*$|^esp32marauder>\s*$/i
 
 interface PortRef {
   value: { writable: WritableStream<Uint8Array> | null } | null
@@ -15,17 +15,18 @@ interface ExecutorDeps {
   onLine: (handler: (line: string) => void) => () => void
   addToTerminal: (text: string, type?: string) => void
   simulateDemo?: (command: string) => void
-  clearAPs?: () => void
-  clearSelected?: () => void
+  /** AR-04: optional override of the prompt detector. Defaults to the
+   *  marauderV1 META.prompt regex. Pass a custom regex to support other
+   *  firmware profiles. */
+  promptRe?: RegExp
 }
 
 export function createCommandExecutor(deps: ExecutorDeps) {
+  const PROMPT_RE = deps.promptRe ?? META.prompt
   const _send = async (command: string): Promise<boolean> => {
     if (!command) return false
     const cmd = sanitizeText(command, { maxLength: 512 })
     if (!cmd) return false
-    if (cmd === 'clearlist -a') deps.clearAPs?.()
-    else if (cmd === 'clearlist -c') deps.clearSelected?.()
 
     if (deps.isDemoMode.value) {
       deps.addToTerminal(`> ${cmd}`, 'command')
@@ -50,7 +51,7 @@ export function createCommandExecutor(deps: ExecutorDeps) {
         writer.releaseLock()
       }
     } catch (e) {
-      deps.addToTerminal(`Failed: ${(e as Error).message}`, 'error')
+      deps.addToTerminal(`Failed: ${e instanceof Error ? e.message : String(e)}`, 'error')
       return false
     }
   }

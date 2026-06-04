@@ -4,6 +4,11 @@ export interface ParserContext {
   apStore: ApStoreLike
   bleStore: BleStoreLike
   dashStore: DashStoreLike
+  infoAPIndex: number
+  // Q-15: re-use the canonical IPListEntry shape from types/index.ts
+  // instead of redefining an inline anonymous type. Keeping a single
+  // source of truth prevents the two from drifting apart.
+  ipListBuffer: IPListEntry[]
 }
 
 export interface ApStoreLike {
@@ -39,8 +44,10 @@ export interface DashStoreLike {
 export type ParserFn = (line: string, ctx: ParserContext) => boolean
 
 export interface FirmwareProfile {
+  name: string
   id: string
   description: string
+  version: number
   DISPATCH: Record<number, ParserFn[]>
   FALLBACK_PARSERS: ParserFn[]
   resetState(): void

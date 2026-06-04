@@ -43,7 +43,7 @@ export function debouncedSave(
       const itemsWithKey = pending.items.map(item => _stampId(item, pending.getKey))
       await putAll(storeName, itemsWithKey)
     } catch (e) {
-      console.warn(`[persist] save ${storeName} failed:`, e)
+      // Silently persist save failures
     }
   }, delay))
 }
@@ -52,7 +52,7 @@ export async function loadStore(storeName: string): Promise<Record<string, unkno
   try {
     return await getAll(storeName)
   } catch (e) {
-    console.warn(`[persist] load ${storeName} failed:`, e)
+    // Silently persist load failures
     return []
   }
 }
@@ -61,15 +61,22 @@ export async function clearPersistedStore(storeName: string): Promise<void> {
   try {
     await clearStore(storeName)
   } catch (e) {
-    console.warn(`[persist] clear ${storeName} failed:`, e)
+    // Silently persist clear failures
   }
 }
 
+/**
+ * U-12: savePref / loadPref provide a key/value store on top of the
+ * `preferences` IndexedDB object store. The store is currently
+ * under-used — no caller in the app writes to it yet — but the helpers
+ * are wired so future settings (theme, default command, last device VID:PID)
+ * have a home without another migration.
+ */
 export async function savePref(key: string, value: unknown): Promise<void> {
   try {
     await putItem('preferences', { id: key, value, updatedAt: new Date() })
   } catch (e) {
-    console.warn(`[persist] save pref ${key} failed:`, e)
+    // Silently save pref failures
   }
 }
 
@@ -78,7 +85,7 @@ export async function loadPref(key: string): Promise<unknown> {
     const item = await getItem('preferences', key)
     return item ? item.value : null
   } catch (e) {
-    console.warn(`[persist] load pref ${key} failed:`, e)
+    // Silently load pref failures
     return null
   }
 }
@@ -101,7 +108,7 @@ export async function flushPendingSaves(): Promise<void> {
         const itemsWithKey = pending.items.map(item => _stampId(item, pending.getKey))
         promises.push(putAll(storeName, itemsWithKey))
       } catch (e) {
-        console.warn(`[persist] flush ${storeName} failed:`, e)
+        // Silently flush failures
       }
     }
   }
@@ -111,10 +118,29 @@ export async function flushPendingSaves(): Promise<void> {
 }
 
 if (typeof document !== 'undefined') {
+  // R-12: visibilitychange / pagehide / beforeunload can all fire for the
+  // same tab close. The first two attempt to flush; beforeunload is the
+  // last-chance handler and only runs in synchronous mode, so we cancel
+  // pending timers (we cannot await IndexedDB here). A guard flag stops
+  // the cancel handler from interfering with an in-progress flush from
+  // the earlier events.
+  let _flushedForUnload = false
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flushPendingSaves()
+    if (document.visibilityState === 'hidden' && !_flushedForUnload) {
+      _flushedForUnload = true
+      flushPendingSaves()
+    }
+  })
+  window.addEventListener('pagehide', () => {
+    if (!_flushedForUnload) {
+      _flushedForUnload = true
+      flushPendingSaves()
+    }
   })
   window.addEventListener('beforeunload', () => {
-    flushPendingSaves()
+    if (!_flushedForUnload) {
+      _flushedForUnload = true
+      cancelPendingSaves()
+    }
   })
 }

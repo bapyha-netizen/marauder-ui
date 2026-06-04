@@ -8,8 +8,9 @@
         <span v-if="bleStore.airtagCount" class="badge-red">{{ bleStore.airtagCount }} AirTags</span>
       </div>
       <div class="flex items-center space-x-2">
-        <input v-model="search" placeholder="Search..." class="input w-36 text-xs">
-        <select v-model="sortBy" class="input w-auto text-xs py-1">
+        <label class="sr-only" for="ble-sort">Sort BLE devices by</label>
+        <input v-model="search" type="search" placeholder="Search by name, MAC, or type..." class="input w-36 text-xs" aria-label="Search BLE devices">
+        <select id="ble-sort" v-model="sortBy" class="input w-auto text-xs py-1" aria-label="Sort BLE devices by">
           <option value="rssi">Signal</option>
           <option value="name">Name</option>
           <option value="type">Type</option>
@@ -27,38 +28,36 @@
       <table class="w-full text-xs">
         <thead class="bg-slate-800 sticky top-0 z-10">
           <tr>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-10"><input type="checkbox" @click.stop="toggleSelectAll" :checked="allSelected" :disabled="!bleStore.deviceCount" class="accent-indigo-500 cursor-pointer disabled:opacity-40" title="Select all"></th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider">Name</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-40">MAC</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-14">RSSI</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-14">Pkts</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-16">First</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-16">Last</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-14">Type</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-24">Actions</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-10"><input type="checkbox" @click.stop="toggleSelectAll" :checked="allSelected" :disabled="!bleStore.deviceCount" class="accent-indigo-500 cursor-pointer disabled:opacity-40" title="Select all" aria-label="Select all"></th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider">Name</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-40">MAC</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-14">RSSI</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-14">Pkts</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-16">First</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-16">Last</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-14">Type</th>
+            <th scope="col" class="px-3 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider w-24">Actions</th>
           </tr>
         </thead>
         <tbody>
           <template v-for="dev in filteredDevices" :key="dev.mac">
             <tr class="border-t border-slate-700/30 hover:bg-slate-700/30 cursor-pointer transition-colors"
-              :class="selected.has(dev.mac) ? 'bg-indigo-500/10' : dev.isAirtag ? 'bg-red-500/5' : ''"
-              tabindex="0"
-              @click="toggleSelect(dev)"
-              @keydown.enter.space.prevent="toggleSelect(dev)">
+              :class="isSelected(dev.mac) ? 'bg-indigo-500/10' : dev.isAirtag ? 'bg-red-500/5' : ''"
+              @click="toggleSelect(dev)">
               <td class="px-3 py-2" @click.stop>
-                <input type="checkbox" :checked="selected.has(dev.mac)" @change="toggleSelect(dev)" class="accent-indigo-500 cursor-pointer" :title="selected.has(dev.mac) ? 'Deselect' : 'Select'">
+                <input type="checkbox" :checked="isSelected(dev.mac)" @change="toggleSelect(dev)" class="accent-indigo-500 cursor-pointer" :title="isSelected(dev.mac) ? 'Deselect' : 'Select'">
               </td>
               <td class="px-3 py-2">
                 <div class="flex items-center space-x-1.5">
                   <span class="font-medium text-slate-200">{{ dev.name }}</span>
-                  <span v-if="selected.has(dev.mac)" class="badge-green">sel</span>
+                  <span v-if="isSelected(dev.mac)" class="badge-green">sel</span>
                   <span v-if="dev.manufacturer && dev.manufacturer !== dev.name" class="text-[10px] text-slate-500">{{ dev.manufacturer }}</span>
                 </div>
               </td>
               <td class="px-3 py-2 font-mono text-slate-400 text-[11px]">
                 <div class="flex items-center space-x-1.5">
                   <span>{{ dev.mac }}</span>
-                  <button @click.stop="copyMac(dev)" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy MAC">
+                  <button @click.stop="copyMac(dev)" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy MAC" aria-label="Copy MAC">
                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                   </button>
                 </div>
@@ -74,13 +73,13 @@
               </td>
               <td class="px-3 py-2" @click.stop>
                 <div class="flex items-center space-x-1">
-                  <button @click="copyMac(dev)" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy MAC">
+                  <button @click="copyMac(dev)" class="text-slate-500 hover:text-cyan-400 transition-colors" title="Copy MAC" aria-label="Copy MAC">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                   </button>
-                  <button v-if="dev.isAirtag" @click="runCommand(`spoofat -t ${dev.mac}`, `Spoof ${dev.name}`, { destructive: true })" :disabled="!ctx.isConnected.value" :title="ctx.btnState('spoofat -t 0').title" class="text-pink-400 hover:text-pink-300 transition-colors disabled:opacity-30" title="Spoof this AirTag">
+                  <button v-if="dev.isAirtag" @click="runCommand(`spoofat -t ${dev.mac}`, `Spoof ${dev.name}`, { destructive: true })" :disabled="!ctx.isConnected.value" :title="ctx.btnState('spoofat -t 0').title" class="text-pink-400 hover:text-pink-300 transition-colors disabled:opacity-30" title="Spoof this AirTag" aria-label="Spoof this AirTag">
                     <span class="text-xs">🔄</span>
                   </button>
-                  <button v-if="isSpeaker(dev)" @click="runSpeakerSpam(dev)" :disabled="!ctx.isConnected.value" :title="`Spam ${dev.name}`" class="text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-30" title="Speaker spam">
+                  <button v-if="isSpeaker(dev)" @click="runSpeakerSpam(dev)" :disabled="!ctx.isConnected.value" :title="`Spam ${dev.name}`" class="text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-30" title="Speaker spam" aria-label="Speaker spam">
                     <span class="text-xs">🔊</span>
                   </button>
                 </div>
@@ -175,7 +174,7 @@ const { show: toastShow } = useToast()
 const ctx = useContextAction(serialStore)
 const search = ref('')
 const sortBy = ref('rssi')
-const selected = reactive(new Map())
+const selected = ref({})
 
 const confirmDialog = reactive({
   show: false,
@@ -196,11 +195,11 @@ function isSpeaker(dev) {
   return SPEAKER_KEYWORDS.some(kw => name.includes(kw))
 }
 
-const selectedCount = computed(() => selected.size)
+const selectedCount = computed(() => Object.keys(selected.value).length)
 
 const selectedAirtagCount = computed(() => {
   let n = 0
-  for (const [mac] of selected) {
+  for (const mac of Object.keys(selected.value)) {
     const dev = bleStore.devices.get(mac)
     if (dev?.isAirtag) n++
   }
@@ -209,16 +208,18 @@ const selectedAirtagCount = computed(() => {
 
 const selectedSpeakerCount = computed(() => {
   let n = 0
-  for (const [mac] of selected) {
+  for (const mac of Object.keys(selected.value)) {
     const dev = bleStore.devices.get(mac)
     if (dev && isSpeaker(dev)) n++
   }
   return n
 })
 
+const isSelected = (mac) => selected.value[mac] === true
+
 const allSelected = computed(() => {
   const list = bleStore.sortedDevices
-  return list.length > 0 && list.every(d => selected.has(d.mac))
+  return list.length > 0 && list.every(d => isSelected(d.mac))
 })
 
 const filteredDevices = computed(() => {
@@ -247,24 +248,26 @@ const filteredDevices = computed(() => {
 const toastConnect = () => toastShow('Connect to ESP32 first', 'warning')
 
 const toggleSelect = (dev) => {
-  if (selected.has(dev.mac)) {
-    selected.delete(dev.mac)
+  if (isSelected(dev.mac)) {
+    delete selected.value[dev.mac]
   } else {
-    selected.set(dev.mac, true)
+    selected.value[dev.mac] = true
   }
 }
 
 const toggleSelectAll = () => {
   if (allSelected.value) {
-    selected.clear()
+    selected.value = {}
   } else {
+    const next = { ...selected.value }
     for (const dev of bleStore.sortedDevices) {
-      selected.set(dev.mac, true)
+      next[dev.mac] = true
     }
+    selected.value = next
   }
 }
 
-const clearSelection = () => selected.clear()
+const clearSelection = () => { selected.value = {} }
 
 const copyMac = async (dev) => {
   if (!dev.mac) return
@@ -273,10 +276,10 @@ const copyMac = async (dev) => {
 }
 
 const copySelectedMacs = async () => {
-  if (!selected.size) return
-  const macs = Array.from(selected.keys()).join('\n')
-  const ok = await copyToClipboard(macs)
-  toastShow(ok ? `Copied ${selected.size} MACs` : 'Copy failed', ok ? 'success' : 'error')
+  const macs = Object.keys(selected.value)
+  if (!macs.length) return
+  const ok = await copyToClipboard(macs.join('\n'))
+  toastShow(ok ? `Copied ${macs.length} MACs` : 'Copy failed', ok ? 'success' : 'error')
 }
 
 const runDispatched = async (cmd, label, target = '', opts = {}) => {
@@ -310,17 +313,29 @@ const showConfirm = (payload) => {
 const executeAction = async (payload) => {
   try {
     await runAction({ ...payload, options: { confirm: false } })
-    if (payload.cmd.startsWith('clearlist')) bleStore.clearDevices()
+    if (payload.cmd.startsWith('clearlist')) {
+      bleStore.clearDevices()
+      toastShow('BLE list cleared', 'success')
+    }
   } catch (e) {
     toastShow(`Failed: ${e.message}`, 'error')
   }
+}
+
+const handleClearConfirmed = () => {
+  bleStore.clearDevices()
 }
 
 const onConfirm = async () => {
   const payload = confirmDialog.pendingPayload
   confirmDialog.show = false
   confirmDialog.pendingPayload = null
-  if (payload) await executeAction(payload)
+  if (!payload) return
+  if (payload.__clear) {
+    handleClearConfirmed()
+    return
+  }
+  await executeAction(payload)
 }
 
 const runSpeakerSpam = (dev) => {
@@ -333,23 +348,29 @@ const runSpeakerSpam = (dev) => {
   runCommand(`blespam -t ${type}`, `Spam ${dev.name}`, { destructive: true })
 }
 
-const runSelectedSpeakerSpam = () => {
-  for (const [mac] of selected) {
-    const dev = bleStore.devices.get(mac)
-    if (dev && isSpeaker(dev)) {
-      runSpeakerSpam(dev)
-      return
-    }
+const runSelectedSpeakerSpam = async () => {
+  const speakers = Object.keys(selected.value)
+    .map(mac => bleStore.devices.get(mac))
+    .filter(dev => dev && isSpeaker(dev))
+
+  if (speakers.length === 0) return
+
+  for (const dev of speakers) {
+    if (!dev) continue
+    await runSpeakerSpam(dev)
   }
 }
 
-const runSelectedSpoofAt = () => {
-  for (const [mac] of selected) {
-    const dev = bleStore.devices.get(mac)
-    if (dev?.isAirtag) {
-      runCommand(`spoofat -t ${dev.mac}`, `Spoof ${dev.name}`, { destructive: true })
-      return
-    }
+const runSelectedSpoofAt = async () => {
+  const airtags = Object.keys(selected.value)
+    .map(mac => bleStore.devices.get(mac))
+    .filter(dev => dev?.isAirtag)
+
+  if (airtags.length === 0) return
+
+  for (const dev of airtags) {
+    if (!dev) continue
+    await runCommand(`spoofat -t ${dev.mac}`, `Spoof ${dev.name}`, { destructive: true })
   }
 }
 
@@ -357,12 +378,14 @@ const runCommand = (cmd, label, opts = {}) => runDispatched(cmd, label, '', opts
 
 const handleClear = () => {
   if (bleStore.deviceCount === 0) return
-  showConfirm({
-    cmd: 'clearlist -c',
-    label: `Clear ${bleStore.deviceCount} BLE devices`,
-    icon: '🗑',
-    target: '',
-    options: {}
-  })
+  confirmDialog.show = true
+  confirmDialog.title = `Clear ${bleStore.deviceCount} BLE devices`
+  confirmDialog.body = ['This will remove all discovered BLE devices from the list.', 'Continue?']
+  confirmDialog.cmd = ''
+  confirmDialog.target = ''
+  confirmDialog.icon = '🗑'
+  confirmDialog.severity = SEVERITY.MEDIUM
+  confirmDialog.confirmLabel = `Clear ${bleStore.deviceCount} devices`
+  confirmDialog.pendingPayload = { __clear: true }
 }
 </script>
