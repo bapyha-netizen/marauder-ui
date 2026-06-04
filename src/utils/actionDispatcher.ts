@@ -106,11 +106,16 @@ class ActionDispatcher {
   get actionsRef() { return this._actions }
   get runningActionRef() { return this._runningAction }
 
-  // Q-18: inlined the inner setTimeout cleanup. The original wrapped the
-  // filter in a function, but it captured `action` by reference (the
-  // closure's `action` is the same object mutated in-place by the parent),
-  // so a named local is clearer and avoids one extra allocation per
-  // completed action.
+  // CR-1: safe log normalization — terminal lines can be string or {text, cls}
+  protected _safeTerminalLine(raw: unknown): string {
+    if (!raw) return ''
+    if (typeof raw === 'string') return raw
+    if (typeof raw === 'object' && raw !== null && 'text' in raw) {
+      return String((raw as { text: unknown }).text || '')
+    }
+    return String(raw)
+  }
+
   async _execute({ cmd, label, icon, target, meta }: { cmd: string; label?: string; icon?: string; target?: string | null; meta?: CommandMetaEntry }) {
     const { useSerialStore } = await import('../stores/serialStore')
     const serialStore = useSerialStore()
@@ -142,7 +147,7 @@ class ActionDispatcher {
       }
       const collected: string[] = []
       for (let i = startLen; i < serialStore.terminalOutput.length; i++) {
-        collected.push(sanitizeText(serialStore.terminalOutput[i].text, { html: true }))
+        collected.push(sanitizeText(this._safeTerminalLine(serialStore.terminalOutput[i]), { html: true }))
       }
       const output = collected.join('\n').trim()
       action.result = output || 'OK (no output)'

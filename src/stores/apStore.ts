@@ -366,9 +366,11 @@ export const useApStore = defineStore('ap', () => {
         updates.push([key, { ...ap, isSelected: false }])
       }
     }
+    if (updates.length === 0) return
     for (const [key, updatedAp] of updates) {
       accessPoints.value.set(key, updatedAp)
     }
+    triggerRef(accessPoints)
   }
 
   function updateAP(index: number, data: Partial<APOpaque>) {

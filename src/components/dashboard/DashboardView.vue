@@ -99,7 +99,7 @@
             <div v-if="!bleStore.sortedDevices.length" class="text-center py-12 text-xs text-slate-600">
               <div class="text-2xl mb-2">🔵</div>
               <div>{{ $t('dashboard.noBle') }}</div>
-              <button @click="serialStore.sendCommand('sniffbt')" class="mt-2 text-indigo-400 hover:text-indigo-300">{{ $t('dashboard.bleActions.sniffBle') }}</button>
+              <button @click="runAction({ cmd: 'sniffbt', label: 'Sniff BLE', icon: '🔵' }).catch(() => {})" class="mt-2 text-indigo-400 hover:text-indigo-300">{{ $t('dashboard.bleActions.sniffBle') }}</button>
             </div>
             <button v-for="dev in bleStore.sortedDevices" :key="dev.mac" @click="selectBLE(dev)"
               :class="selectedBLE?.mac === dev.mac ? 'bg-indigo-600/20 border-indigo-500/50' : 'bg-slate-700/20 border-transparent hover:bg-slate-700/40'"
@@ -122,7 +122,7 @@
             <div v-if="!probeStore.probes.length" class="text-center py-12 text-xs text-slate-600">
               <div class="text-2xl mb-2">📱</div>
               <div>{{ $t('dashboard.noProbes') }}</div>
-              <button @click="serialStore.sendCommand('sniffprobe')" class="mt-2 text-indigo-400 hover:text-indigo-300">{{ $t('dashboard.probeActions.sniffProbe') }}</button>
+              <button @click="runAction({ cmd: 'sniffprobe', label: 'Sniff Probe', icon: '📨' }).catch(() => {})" class="mt-2 text-indigo-400 hover:text-indigo-300">{{ $t('dashboard.probeActions.sniffProbe') }}</button>
             </div>
             <div v-for="(p, i) in probeStore.probes" :key="i"
               class="p-2 mb-1 rounded-lg bg-slate-700/20 hover:bg-slate-700/40 transition-colors">
@@ -147,7 +147,7 @@
             <div v-else-if="!selectedAP.stations?.length" class="text-center py-12 text-xs text-slate-600">
               <div class="text-2xl mb-2">📭</div>
               <div>{{ $t('dashboard.noStationsOn') }} {{ selectedAP.essid }}</div>
-              <button @click="serialStore.sendCommand('sniffbeacon')" class="mt-2 text-indigo-400 hover:text-indigo-300">Run sniffbeacon</button>
+              <button @click="runAction({ cmd: 'sniffbeacon', label: 'Sniff Beacon', icon: '📶' }).catch(() => {})" class="mt-2 text-indigo-400 hover:text-indigo-300">Run sniffbeacon</button>
             </div>
             <div v-for="sta in (selectedAP?.stations || [])" :key="sta.mac"
               class="p-2 mb-1 rounded-lg bg-slate-700/20 hover:bg-slate-700/40 transition-colors flex items-center space-x-2">
@@ -495,26 +495,14 @@ const runActionLocal = async (action) => {
   if (action.huntMode) {
     if (!confirm(`Launch "${action.label}"?\n\nThis will scan all BLE devices (branded + generic), detect active speakers, then launch persistent spam.\n\nStop the attack manually when done.`)) return
     toastShow('Starting active speaker hunt...', 'info', 2000)
-    serialStore.sendSequence([
-      { command: 'sniffbt', delay: 10000 },
-      'stopscan',
-      { command: 'sniffbt -t speaker', delay: 8000 },
-      'stopscan',
-      { command: 'sniffbt -t jbl', delay: 6000 },
-      'stopscan',
-      { command: 'sniffbt -t bose', delay: 6000 },
-      'stopscan',
-      { command: 'sniffbt -t sony', delay: 6000 },
-      'stopscan',
-      { command: 'sniffbt -t marshall', delay: 6000 },
-      'stopscan',
-      { command: 'list -t', delay: 2000 },
-      { command: 'sniffbt', delay: 8000 },
-      'stopscan',
-      { command: 'sniffbt -t speaker', delay: 8000 },
-      'stopscan',
-      { command: 'blespam -t speaker' }
-    ])
+    const huntCmds = ['sniffbt', 'stopscan', 'sniffbt -t speaker', 'stopscan',
+      'sniffbt -t jbl', 'stopscan', 'sniffbt -t bose', 'stopscan',
+      'sniffbt -t sony', 'stopscan', 'sniffbt -t marshall', 'stopscan',
+      'list -t', 'sniffbt', 'stopscan', 'sniffbt -t speaker', 'stopscan',
+      'blespam -t speaker']
+    for (const c of huntCmds) {
+      try { await runAction({ cmd: c, label: c, icon: '▶' }) } catch (_) {}
+    }
     toastShow('Active speaker hunt complete — attack running. Press Stop to halt.', 'warning', 5000)
     return
   }

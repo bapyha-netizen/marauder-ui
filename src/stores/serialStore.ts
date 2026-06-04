@@ -216,7 +216,11 @@ export const useSerialStore = defineStore('serial', () => {
     port: port as Ref<{ writable: WritableStream<Uint8Array> | null } | null>,
     onLine,
     addToTerminal: addToTerminal as (text: string, type?: string) => void,
-    simulateDemo: _simulateDemoCommand
+    simulateDemo: _simulateDemoCommand,
+    onPrompt: () => {
+      resetParserState()
+      resetCtxCache()
+    }
   })
 
   const _sendWithSideEffects = async (command: string): Promise<boolean> => {

@@ -32,6 +32,7 @@ export const useProbeStore = defineStore('probe', () => {
 
   function clearProbes() {
     probes.value = []
+    triggerRef(probes)
     clearPersistedStore(PERSIST_KEY)
   }
 

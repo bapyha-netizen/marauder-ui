@@ -57,6 +57,8 @@ export const useBleStore = defineStore('ble', () => {
 
   function clearDevices() {
     devices.value = new Map()
+    _evictionCounter = 0
+    triggerRef(devices)
     clearPersistedStore(PERSIST_KEY)
   }
 

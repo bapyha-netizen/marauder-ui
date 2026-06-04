@@ -19,6 +19,8 @@ interface ExecutorDeps {
    *  marauderV1 META.prompt regex. Pass a custom regex to support other
    *  firmware profiles. */
   promptRe?: RegExp
+  /** Called when a command prompt is detected — signals end of command output */
+  onPrompt?: () => void
 }
 
 export function createCommandExecutor(deps: ExecutorDeps) {
@@ -69,6 +71,7 @@ export function createCommandExecutor(deps: ExecutorDeps) {
       const unsub = deps.onLine((line: string) => {
         if (!resolved && line !== echo && PROMPT_RE.test(line)) {
           resolved = true
+          deps.onPrompt?.()
           cleanup()
           resolve()
         }

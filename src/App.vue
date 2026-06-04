@@ -142,6 +142,7 @@ import { useBleStore } from './stores/bleStore'
 import { useDashboardStore } from './stores/dashboardStore'
 import { useProbeStore } from './stores/probeStore'
 import { parseLine, parseDemoAP, parseDemoBLE, startParser, stopParser } from './services/parserEngine'
+import { runAction } from './utils/actionDispatcher'
 import { useToast } from './utils/toast'
 import { sanitizeText } from './utils/sanitize'
 import { locale, toggleLocale, t } from './services/i18n'
@@ -221,13 +222,7 @@ const checkMobileDebounced = () => {
 onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobileDebounced)
-  window.addEventListener('beforeunload', (e) => {
-    if (serialStore.isConnected) {
-      try { serialStore.port?.value?.close?.() } catch (_) {}
-      e.preventDefault()
-      e.returnValue = ''
-    }
-  })
+  window.addEventListener('beforeunload', _onBeforeUnload)
   try {
     await Promise.all([
       apStore.hydrate(),
@@ -239,11 +234,19 @@ onMounted(async () => {
   }
   startParser()
 })
+const _onBeforeUnload = (e) => {
+  if (serialStore.isConnected) {
+    try { serialStore.port?.value?.close?.() } catch (_) {}
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+
 onUnmounted(() => {
   stopParser()
   dashStore.stopTick()
-  window.removeEventListener('resize', checkMobile)
-  window.removeEventListener('beforeunload', sendStop)
+  window.removeEventListener('resize', checkMobileDebounced)
+  window.removeEventListener('beforeunload', _onBeforeUnload)
   _stopDemoInterval()
 })
 
@@ -251,10 +254,6 @@ watch(() => serialStore.isConnected, (connected) => {
   if (connected) dashStore.startTick()
   else dashStore.stopTick()
 })
-
-const sendStop = () => {
-  serialStore.sendCommand('stopscan')
-}
 
 watch(() => serialStore.terminalOutput.length, (newLen, oldLen) => {
   if (newLen < oldLen) { lastLength = Math.max(0, lastLength - (oldLen - newLen)); return }
@@ -292,7 +291,7 @@ const handleDisconnect = async () => {
 }
 const handleEmergencyStop = () => {
   if (!serialStore.isConnected) { toastShow('Not connected to ESP32', 'error'); return }
-  serialStore.sendCommand('stopscan')
+  runAction({ cmd: 'stopscan', label: 'Emergency Stop', icon: '⏹' }).catch(() => {})
   toastShow('Emergency stop sent', 'warning')
 }
 
