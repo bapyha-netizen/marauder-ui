@@ -181,6 +181,20 @@ const selectedCount = computed(() => {
   return n
 })
 
+const allSelected = computed(() => {
+  const list = apStore.sortedAPs
+  return list.length > 0 && list.every(ap => ap.isSelected)
+})
+
+const toggleSelectAll = () => {
+  const next = !allSelected.value
+  for (const ap of apStore.accessPoints.values()) {
+    if (ap.index !== undefined && ap.index !== null) {
+      apStore.updateAP(ap.index, { isSelected: next })
+    }
+  }
+}
+
 const toggleExpand = (bssid) => {
   const s = new Set(expanded.value)
   if (s.has(bssid)) s.delete(bssid)
