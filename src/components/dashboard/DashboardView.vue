@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full flex gap-3">
+  <div class="flex-1 min-h-0 min-w-0 flex gap-3">
     <!-- LEFT: Live Output (1/4) -->
     <div class="w-1/4 flex flex-col min-h-0 min-w-0">
       <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 flex flex-col h-full">
