@@ -167,11 +167,7 @@
     <div class="w-1/2 flex flex-col min-h-0 min-w-0 gap-3">
       <!-- Top: Selected target details + actions -->
       <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-3 flex-shrink-0 overflow-y-auto max-h-32">
-        <div v-if="!selectedTarget" class="text-center py-2 text-xs text-slate-600">
-          <div class="text-lg mb-1">🎯</div>
-          <div>{{ $t('dashboard.selectTarget') }}</div>
-        </div>
-        <div v-if="!selectedTarget && availableActions.length" class="mt-2">
+        <div v-if="!selectedTarget && availableActions.length" class="mt-1">
           <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">{{ $t('dashboard.adminActions') }}</div>
           <div class="flex flex-wrap gap-1.5">
             <button v-for="action in availableActions" :key="action.key" @click="runActionLocal(action)"
