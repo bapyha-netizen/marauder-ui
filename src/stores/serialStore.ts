@@ -228,7 +228,11 @@ export const useSerialStore = defineStore('serial', () => {
     return result
   }
 
+  let _isConnecting = false
+
   const _connect = async (portArg: SerialPort | null = null): Promise<boolean> => {
+    if (_isConnecting) return false
+    _isConnecting = true
     getReconnect().cancel()
     try {
       return await _buildConnect(portArg)()
@@ -237,6 +241,8 @@ export const useSerialStore = defineStore('serial', () => {
       addToTerminal(`Connection failed: ${(e as Error).message}`, 'error')
       getReconnect().schedule()
       throw e
+    } finally {
+      _isConnecting = false
     }
   }
 
@@ -295,12 +301,19 @@ export const useSerialStore = defineStore('serial', () => {
     scheduleTerminalUpdate()
   }
 
+  const _sendAndWaitWithSideEffects = async (command: string, timeout?: number, signal?: AbortSignal): Promise<void> => {
+    if (signal?.aborted) return
+    await executor.sendAndWait(command, timeout)
+    if (command === 'clearlist -a') apStore.clearAPs()
+    else if (command === 'clearlist -c') apStore.clearSelected()
+  }
+
   return {
     port, isConnected, isDemoMode, terminalOutput,
     baudRate, autoReconnect, reconnectAttempts,
     connect: _connect, disconnect,
     sendCommand: _sendWithSideEffects,
-    sendAndWait: executor.sendAndWait,
+    sendAndWait: _sendAndWaitWithSideEffects,
     sendSequence: executor.sendSequence,
     scanAll, clearListAndScan,
     addToTerminal, clearOutput, toggleDemo, onLine, setTerminalOutput,

@@ -1,10 +1,13 @@
 function escCsv(value: unknown): string {
     if (value === null || value === undefined) return ''
     let s = String(value)
-    // Prevent Excel formula injection
-    if (/^[=+\-@]/.test(s)) {
+    // Prevent Excel formula injection (also covers tab, cr, pipe, DDE)
+    if (/^[=+\-@\t\r|]/.test(s)) {
         s = "'" + s
     }
+    // Strip zero-width and bidi override characters
+    s = s.replace(/[\u200B-\u200D\uFEFF]/g, '')
+    s = s.replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '')
     if (/[",\n]/.test(s)) {
         return `"${s.replace(/"/g, '""')}"`
     }

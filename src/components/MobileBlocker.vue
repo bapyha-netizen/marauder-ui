@@ -24,7 +24,7 @@ const headingRef = ref(null)
 
 const checkMobile = () => {
   const ua = navigator.userAgent
-  const isIPad = /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1
+  const isIPad = /iPad/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1 && 'ontouchend' in document)
   const isMobileUA = /Android|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
   const isNarrowScreen = window.innerWidth <= 768
   const hasWebSerial = 'serial' in navigator

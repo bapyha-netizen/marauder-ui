@@ -13,5 +13,5 @@ app.mount('#app')
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   import('virtual:pwa-register').then(({ registerSW }) => {
     registerSW({ immediate: true })
-  })
+  }).catch(e => console.warn('PWA registration failed:', e))
 }

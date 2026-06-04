@@ -154,6 +154,11 @@ const showConfirm = (payload) => {
   confirmDialog.pendingPayload = payload
 }
 
+const handleClearConfirmed = () => {
+  probeStore.clearProbes()
+  toastShow(t('probesExplorer.cleared'), 'success')
+}
+
 const executeAction = async (payload) => {
   try {
     await runAction({ ...payload, options: { confirm: false } })
@@ -170,17 +175,24 @@ const onConfirm = async () => {
   const payload = confirmDialog.pendingPayload
   confirmDialog.show = false
   confirmDialog.pendingPayload = null
+  if (!payload) return
+  if (payload.__clear) {
+    handleClearConfirmed()
+    return
+  }
   if (payload) await executeAction(payload)
 }
 
 const handleClear = () => {
   if (probeStore.probeCount === 0) return
-  showConfirm({
-    cmd: 'clearlist -c',
-    label: `Clear ${probeStore.probeCount} probes`,
-    icon: '🗑',
-    target: '',
-    options: {}
-  })
+  confirmDialog.show = true
+  confirmDialog.title = t('confirm.title', { label: `Clear ${probeStore.probeCount} probes` })
+  confirmDialog.body = tA('confirm.bodyNormal')
+  confirmDialog.cmd = ''
+  confirmDialog.target = ''
+  confirmDialog.icon = '🗑'
+  confirmDialog.severity = SEVERITY.MEDIUM
+  confirmDialog.confirmLabel = `Clear All`
+  confirmDialog.pendingPayload = { __clear: true }
 }
 </script>

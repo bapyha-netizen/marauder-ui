@@ -7,6 +7,9 @@ const deferredPrompt = ref(null)
 const onBeforeInstall = (e) => {
   e.preventDefault()
   deferredPrompt.value = e
+  try {
+    if (localStorage.getItem('pwa-install-dismissed') === 'true') return
+  } catch (_) {}
   showPrompt.value = true
 }
 const onAppInstalled = () => {
@@ -26,14 +29,23 @@ onUnmounted(() => {
 
 const install = async () => {
   if (!deferredPrompt.value) return
-  deferredPrompt.value.prompt()
-  await deferredPrompt.value.userChoice
-  showPrompt.value = false
-  deferredPrompt.value = null
+  try {
+    deferredPrompt.value.prompt()
+    const { outcome } = await deferredPrompt.value.userChoice
+    if (outcome === 'accepted') {
+      // PWA installed successfully
+    }
+  } catch (e) {
+    console.error('PWA install failed:', e)
+  } finally {
+    showPrompt.value = false
+    deferredPrompt.value = null
+  }
 }
 
 const dismiss = () => {
   showPrompt.value = false
+  try { localStorage.setItem('pwa-install-dismissed', 'true') } catch (_) {}
 }
 </script>
 

@@ -153,8 +153,15 @@ const apStore = useApStore()
 const { show: toastShow } = useToast()
 const ctx = useContextAction(serialStore)
 const search = ref('')
+const debouncedSearch = ref('')
 const sortBy = ref('rssi')
 const expanded = ref(new Set())
+
+let _searchTimer = null
+watch(search, (v) => {
+  if (_searchTimer) clearTimeout(_searchTimer)
+  _searchTimer = setTimeout(() => { _searchTimer = null; debouncedSearch.value = v }, 200)
+})
 
 const confirmDialog = reactive({
   show: false,
@@ -200,8 +207,8 @@ const copyAllBssids = async () => {
 
 const filteredAPs = computed(() => {
   let list = apStore.sortedAPs
-  if (search.value) {
-    const q = search.value.toLowerCase()
+  if (debouncedSearch.value) {
+    const q = debouncedSearch.value.toLowerCase()
     list = list.filter(ap =>
       (ap.essid || '').toLowerCase().includes(q) ||
       (ap.bssid || '').toLowerCase().includes(q)

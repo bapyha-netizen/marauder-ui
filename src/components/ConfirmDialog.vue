@@ -34,7 +34,8 @@
               {{ cancelLabel }}
             </button>
             <button @click="onConfirm"
-              class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2"
+              :disabled="_isConfirming"
+              class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
               :class="confirmClass">
               {{ confirmLabel }}
             </button>
@@ -118,7 +119,14 @@ watch(() => props.show, async (s) => {
   }
 })
 
-const onConfirm = () => emit('confirm')
+const _isConfirming = ref(false)
+
+const onConfirm = () => {
+  if (_isConfirming.value) return
+  _isConfirming.value = true
+  emit('confirm')
+  setTimeout(() => { _isConfirming.value = false }, 500)
+}
 const onCancel = () => emit('cancel')
 </script>
 

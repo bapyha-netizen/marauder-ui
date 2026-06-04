@@ -56,8 +56,9 @@ export function createCommandExecutor(deps: ExecutorDeps) {
     }
   }
 
-  const sendAndWait = (command: string, timeout: number = DEFAULT_CMD_TIMEOUT_MS): Promise<void> => {
+  const sendAndWait = (command: string, timeout: number = DEFAULT_CMD_TIMEOUT_MS, signal?: AbortSignal): Promise<void> => {
     return new Promise((resolve) => {
+      if (signal?.aborted) { resolve(); return }
       if (deps.isDemoMode.value || !deps.port.value) {
         _send(command)
         setTimeout(resolve, Math.min(timeout, 500))
@@ -68,24 +69,35 @@ export function createCommandExecutor(deps: ExecutorDeps) {
       const unsub = deps.onLine((line: string) => {
         if (!resolved && line !== echo && PROMPT_RE.test(line)) {
           resolved = true
-          unsub()
-          clearTimeout(timer)
+          cleanup()
           resolve()
         }
       })
+      const onAbort = () => {
+        if (!resolved) {
+          resolved = true
+          cleanup()
+          resolve()
+        }
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
       const timer = setTimeout(() => {
         if (!resolved) {
           resolved = true
-          unsub()
+          cleanup()
           deps.addToTerminal(`Timed out waiting for prompt after: ${command}`, 'warning')
           resolve()
         }
       }, timeout)
+      const cleanup = () => {
+        clearTimeout(timer)
+        unsub()
+        signal?.removeEventListener('abort', onAbort)
+      }
       _send(command).then(sent => {
         if (!sent && !resolved) {
           resolved = true
-          unsub()
-          clearTimeout(timer)
+          cleanup()
           resolve()
         }
       })

@@ -104,6 +104,8 @@ import { runAction, getPrereqState, shouldConfirm } from '../utils/actionDispatc
 import { sanitizeText } from '../utils/sanitize'
 import ConfirmDialog from './ConfirmDialog.vue'
 import { t, tA, locale } from '../services/i18n'
+import { useToast } from '../utils/toast'
+const { show: toastShow } = useToast()
 
 const serialStore = useSerialStore()
 const cmdLang = locale
@@ -201,8 +203,6 @@ const submitPrompt = () => {
 }
 
 const cancelPrompt = async () => {
-  const { useToast } = await import('../utils/toast')
-  const { show: toastShow } = useToast()
   promptModal.value = null
   promptValues.value = []
   if (promptResolve) {
@@ -242,8 +242,6 @@ const executePayload = async (payload) => {
     }
     dashStore.incrementCommands()
   } catch (e) {
-    const { useToast } = await import('../utils/toast')
-    const { show: toastShow } = useToast()
     const hint = e.hint ? ' — ' + (typeof e.hint === 'string' && t(e.hint) !== e.hint ? t(e.hint) : e.hint) : ''
     if (e.code === 'PREREQ_FAILED') {
       toastShow(t('common.failed', { msg: e.message }) + hint, 'error')
@@ -255,8 +253,6 @@ const executePayload = async (payload) => {
 
 const send = async (cmdObj) => {
   if (!serialStore.isConnected) {
-    const { useToast } = await import('../utils/toast')
-    const { show: toastShow } = useToast()
     toastShow(t('commandBuilder.connectFirst'), 'warning')
     return
   }
@@ -265,8 +261,6 @@ const send = async (cmdObj) => {
   const meta = getCommandMeta(resolved)
   const prereq = getPrereqState(resolved)
   if (!prereq.ok) {
-    const { useToast } = await import('../utils/toast')
-    const { show: toastShow } = useToast()
     const hint = prereq.hint ? ' — ' + prereq.hint : ''
     toastShow(prereq.reason + hint, 'error')
     return

@@ -172,6 +172,20 @@
           <div>{{ $t('dashboard.selectTarget') }}</div>
           <div class="mt-2 text-[10px] text-slate-700">{{ $t('dashboard.runScan') }}</div>
         </div>
+        <div v-if="!selectedTarget && availableActions.length" class="mt-4">
+          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">{{ $t('dashboard.adminActions') }}</div>
+          <div class="flex flex-wrap gap-1.5">
+            <button v-for="action in availableActions" :key="action.key" @click="runActionLocal(action)"
+              :disabled="!actionState(action).canRun || !!actionRunning"
+              :class="actionBtnClass(action)"
+              :title="actionState(action).tooltip"
+              class="px-2.5 py-1.5 text-[11px] font-medium rounded-md border transition-colors flex items-center space-x-1 disabled:opacity-40 disabled:cursor-not-allowed">
+              <span v-if="actionRunning && actionRunning.id === action.id" class="animate-spin">⏳</span>
+              <span v-else>{{ action.icon }}</span>
+              <span>{{ action.label }}</span>
+            </button>
+          </div>
+        </div>
         <template v-else>
           <div class="flex items-start justify-between mb-2">
             <div class="flex-1 min-w-0">
@@ -386,6 +400,29 @@ const PROBE_ACTIONS = [
   { key: 'listp',     label: 'List Probes', icon: '📋', cmd: 'list -p', needsSelected: false }
 ]
 
+const ADMIN_ACTIONS = [
+  { key: 'sysinfo',   label: 'System Info', icon: 'ℹ', cmd: 'info', needsSelected: false },
+  { key: 'apinfo',    label: 'AP Info', icon: 'ℹ', cmd: 'info -a 0', needsSelected: false },
+  { key: 'settings',  label: 'Settings', icon: '⚙', cmd: 'settings', needsSelected: false },
+  { key: 'ch1',       label: 'Channel 1', icon: '📺', cmd: 'channel -s 1', needsSelected: false },
+  { key: 'ch6',       label: 'Channel 6', icon: '📺', cmd: 'channel -s 6', needsSelected: false },
+  { key: 'ch11',      label: 'Channel 11', icon: '📺', cmd: 'channel -s 11', needsSelected: false },
+  { key: 'reboot',    label: 'Reboot', icon: '🔄', cmd: 'reboot', needsSelected: false },
+  { key: 'ledred',    label: 'LED Red', icon: '💡', cmd: 'led -s #FF0000', needsSelected: false },
+  { key: 'ledrainbow', label: 'LED Rainbow', icon: '🌈', cmd: 'led -p rainbow', needsSelected: false },
+  { key: 'brightness', label: 'Brightness', icon: '☀', cmd: 'brightness -s 5', needsSelected: false },
+  { key: 'packetcount', label: 'Packet Count', icon: '📊', cmd: 'packetcount', needsSelected: false },
+  { key: 'sigmon',    label: 'Signal Mon', icon: '📈', cmd: 'sigmon', needsSelected: false },
+  { key: 'chanalyzer', label: 'Ch Analyzer', icon: '📊', cmd: 'channelanalyzer', needsSelected: false },
+  { key: 'mactrack',  label: 'MAC Tracker', icon: '📍', cmd: 'mactrack', needsSelected: false },
+  { key: 'gpsdata',   label: 'GPS Data', icon: '🛰', cmd: 'gpsdata', needsSelected: false },
+  { key: 'nmea',      label: 'NMEA', icon: '📡', cmd: 'nmea', needsSelected: false },
+  { key: 'gpspoi',    label: 'GPS POI', icon: '📍', cmd: 'gpspoi -s', needsSelected: false },
+  { key: 'gpstracker', label: 'GPS Tracker', icon: '🏃', cmd: 'gpstracker -c start', needsSelected: false },
+  { key: 'wardrive',  label: 'Wardrive', icon: '🗺', cmd: 'wardrive', needsSelected: false },
+  { key: 'wardrivepoi', label: 'POI Tag', icon: '📌', cmd: 'wardrivepoi', needsSelected: false }
+]
+
 const selectedTarget = computed(() => {
   if (activeTab.value === 'ap' && selectedAP.value) {
     const ap = selectedAP.value
@@ -428,7 +465,7 @@ const availableActions = computed(() => {
   if (activeTab.value === 'probes') {
     return PROBE_ACTIONS
   }
-  return []
+  return ADMIN_ACTIONS
 })
 
 const selectAP = (ap) => {
@@ -577,12 +614,18 @@ watch(() => serialStore.terminalOutput.length, () => {
   })
 })
 
+let _scrollTicking = false
 const onTerminalScroll = () => {
-  if (!liveRef.value) return
-  const dist = liveRef.value.scrollHeight - (liveRef.value.scrollTop + liveRef.value.clientHeight)
-  if (dist > 60) autoScroll.value = false
-  else if (dist < 6) autoScroll.value = true
-  terminalScrollTop.value = liveRef.value.scrollTop
+  if (_scrollTicking) return
+  _scrollTicking = true
+  requestAnimationFrame(() => {
+    _scrollTicking = false
+    if (!liveRef.value) return
+    const dist = liveRef.value.scrollHeight - (liveRef.value.scrollTop + liveRef.value.clientHeight)
+    if (dist > 60) autoScroll.value = false
+    else if (dist < 6) autoScroll.value = true
+    terminalScrollTop.value = liveRef.value.scrollTop
+  })
 }
 
 const onTerminalResize = () => {

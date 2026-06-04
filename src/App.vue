@@ -212,10 +212,22 @@ const cycleTab = (direction) => {
   })
 }
 
+let _resizeTimer = null
+const checkMobileDebounced = () => {
+  if (_resizeTimer) clearTimeout(_resizeTimer)
+  _resizeTimer = setTimeout(() => { _resizeTimer = null; checkMobile() }, 200)
+}
+
 onMounted(async () => {
   checkMobile()
-  window.addEventListener('resize', checkMobile)
-  window.addEventListener('beforeunload', sendStop)
+  window.addEventListener('resize', checkMobileDebounced)
+  window.addEventListener('beforeunload', (e) => {
+    if (serialStore.isConnected) {
+      try { serialStore.port?.value?.close?.() } catch (_) {}
+      e.preventDefault()
+      e.returnValue = ''
+    }
+  })
   try {
     await Promise.all([
       apStore.hydrate(),

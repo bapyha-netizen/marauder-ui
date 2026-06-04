@@ -30,7 +30,8 @@ export function debouncedSave(
   } else {
     _firstCall.set(storeName, Date.now())
   }
-  const elapsed = Date.now() - (_firstCall.get(storeName) || Date.now())
+  const firstCallTime = _firstCall.get(storeName)
+  const elapsed = firstCallTime ? Date.now() - firstCallTime : 0
   const delay = elapsed >= SAVE_MAX_WAIT_MS ? 0 : SAVE_DEBOUNCE_MS
   _timers.set(storeName, setTimeout(async () => {
     const pending = _pending.get(storeName)

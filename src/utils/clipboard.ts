@@ -1,5 +1,8 @@
+const MAX_CLIPBOARD_SIZE = 1_000_000
+
 export async function copyToClipboard(text: string | null | undefined): Promise<boolean> {
   if (!text) return false
+  if (text.length > MAX_CLIPBOARD_SIZE) return false
   if (navigator.clipboard && window.isSecureContext) {
     try {
       await navigator.clipboard.writeText(text)
@@ -11,6 +14,7 @@ export async function copyToClipboard(text: string | null | undefined): Promise<
   try {
     const ta = document.createElement('textarea')
     ta.value = text
+    ta.readOnly = true
     ta.style.position = 'fixed'
     ta.style.opacity = '0'
     ta.style.pointerEvents = 'none'

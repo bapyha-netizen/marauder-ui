@@ -105,6 +105,7 @@ export default {
       sniffProbe: 'Sniff Probe',
       listProbes: 'Список Зондов',
     },
+    adminActions: 'Админ Действия',
   },
 
   commandBuilder: {

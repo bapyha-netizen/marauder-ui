@@ -1,6 +1,6 @@
-# Marauder UI — документация
+# Marauder UI
 
-**Версия:** 0.6.0 (build 2026-06-04) - i18n & Security
+**Версия:** 0.7.0 (build 2026-06-05) — Full Audit & Bugfix
 **Прошивка:** [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko
 **Назначение:** Desktop/web UI для управления ESP32 с прошивкой Marauder через Web Serial API
 
@@ -13,16 +13,15 @@
 3. [Быстрый старт](#быстрый-старт)
 4. [Подключение к ESP32](#подключение-к-esp32)
 5. [Интерфейс](#интерфейс)
-6. [Команды](#команды)
-7. [Сценарии](#сценарии)
-8. [Speaker Hunter](#speaker-hunter)
-9. [Парсер данных](#парсер-данных)
-10. [Demo-режим](#demo-режим)
-11. [Советы](#советы)
+6. [Демо-режим](#демо-режим)
+7. [Разработка](#разработка)
+8. [Сборка и деплой](#сборка-и-деплой)
+9. [Тестирование](#тестирование)
+10. [Структура проекта](#структура-проекта)
+11. [Безопасность](#безопасность)
 12. [Производительность](#производительность)
-13. [Безопасность](#безопасность)
-14. [Changelog](#changelog)
-15. [Юридическое предупреждение](#юридическое-предупреждение)
+13. [Changelog](#changelog)
+14. [Юридическое предупреждение](#юридическое-предупреждение)
 
 ---
 
@@ -34,17 +33,17 @@ Marauder UI — графический интерфейс для **ESP32 Maraude
 
 - 📡 **Сканирование WiFi** — `scanall`, `sniffbeacon`, `sniffprobe`, `sniffdeauth`, `sniffpmkid`, `sniffraw`, `sniffsae`, `sigmon`, `mactrack`
 - 🔵 **Bluetooth** — `sniffbt` (AirTag/Flipper/Flock/Meta/Speakers), `blespam` (11 типов), `sniffskim`, `spoofat`
-- 🔊 **Атаки на колонки** — Speaker Hunter (поиск + атака), Speaker Kill (агрессивный спам), целевые атаки по брендам (JBL/Bose/Sony/Marshall)
+- 🔊 **Атаки на колонки** — Speaker Hunter (поиск + атака), Speaker Kill (агрессивный спам), целевые атаки по брендам
 - ⚡ **Атаки** — deauth, beacon spam (random/list/clone), probe spam, rickroll, badmsg, sleep, sae, csa, quiet, funny
-- 📊 **Дашборд** — Live Output, статистика AP/Stations/BLE/Pkts, топ-10 AP, лента событий
+- 📊 **Дашборд** — Live Output с виртуальным скроллом, статистика AP/Stations/BLE/Pkts, топ-10 AP, лента событий
 - 📋 **Таблицы** — AP Explorer (с раскрытием станций, сортировкой, поиском), BLE Explorer (с подсветкой AirTag)
-- 🗺 **Wardraving** — GPS-трекинг с записью в Wigle-формате, отметки POI, NMEA
-- ⚡ **Сценарии** — 20 готовых сценариев (рекон, атаки, BLE, GPS, колонки)
+- 🗺 **Wardriving** — GPS-трекинг с записью в Wigle-формате, отметки POI, NMEA
+- ⚡ **Сценарии** — 16 готовых сценариев (рекон, атаки, BLE, GPS, колонки) с Abort-механизмом
 - 🔌 **Demo-режим** — работа без ESP32 для ознакомления
 - 🆘 **Emergency Stop** — кнопка немедленной остановки в хедере
-- ⚡ **Производительность** — 10-100x оптимизации для потокового режима (1000 строк/сек)
-- 🌐 **i18n** — переключение русского/английского языка интерфейса (кнопка EN/RU в хедере)
-- 🔒 **Безопасность** — USB vendor whitelist, beforeunload persistence, memory bounds, ARIA labels, HTML-фильтрация XSS
+- 🔒 **Безопасность** — USB vendor whitelist, CSP в production, HTML-фильтрация, Excel Formula Injection защита
+- 🌐 **i18n** — переключение русского/английского языка (кнопка EN/RU в хедере)
+- ♿ **Accessibility** — ARIA labels, клавиатурная навигация, focus trap, color contrast
 
 ---
 
@@ -70,75 +69,10 @@ Marauder UI — графический интерфейс для **ESP32 Maraude
 └──────────────────────────────────────────────────────────┘
 ```
 
-### Структура проекта
-
-```
-src/
-├── stores/                      # Pinia stores (TypeScript)
-│   ├── serialStore.ts           # Serial-порт, терминал, команды
-│   ├── apStore.ts               # Точки доступа + станции + maintained indexes
-│   ├── bleStore.ts              # BLE-устройства
-│   ├── dashboardStore.ts        # Статистика, события, парсинг станций
-│   └── probeStore.ts            # Probe-запросы
-├── i18n/                        # Переводы (TypeScript)
-│   ├── en.ts                    # Английский
-│   └── ru.ts                    # Русский
-├── services/                    # Business logic (TypeScript)
-│   ├── i18n.ts                  # i18n: t(), tA(), locale, setLocale
-│   ├── parserEngine.ts          # Парсер-диспетчер → firmware profile
-│   ├── firmwareProfiles/
-│   │   ├── marauderV1.ts        # Парсеры для текущей прошивки
-│   │   └── index.ts             # Реестр профилей
-│   ├── serialReader.ts          # Read loop, TextDecoder, buffer trimming
-│   ├── commandExecutor.ts       # sendCommand, sendAndWait, sendSequence
-│   ├── serialReconnect.ts       # Auto-reconnect, device plug/unplug
-│   ├── commandRegistry.ts       # 77 команд, 9 групп, 20 сценариев
-│   └── commandMeta.ts           # Метаданные команд (severity, target, needsTarget)
-├── components/
-│   ├── dashboard/               # DashboardView (Live Output + статистика + кнопки атак)
-│   ├── ap/                      # APExplorer (таблица AP/станций)
-│   ├── ble/                     # BLEExplorer (таблица BLE)
-│   ├── probes/                  # ProbesView (таблица probe-запросов)
-│   ├── workflow/                # WorkflowBuilder (сценарии)
-│   ├── help/                    # HelpGuide (справка с поиском)
-│   └── ConfirmDialog.vue        # Диалог подтверждения
-├── composables/
-│   └── useContextAction.ts      # Композабл для действий над AP/BLE
-│   └── useConfirmDialog.ts      # Композабл для диалога подтверждения
-├── utils/                       # Утилиты (TypeScript)
-│   ├── sanitize.ts              # sanitizeText, sanitizeAscii, normalizeMac, safeParseInt
-│   ├── uuid.ts                  # UUID v4 + recordKey для IndexedDB
-│   ├── logger.ts                # Ring-buffer logger с уровнями
-│   ├── metrics.ts               # Rolling counters: lines/sec, parser dispatches
-│   ├── persist.ts               # Debounced IndexedDB persistence + beforeunload
-│   ├── idb.ts                   # IndexedDB wrapper
-│   ├── format.ts                # signalClass, fmtTime, dotClass
-│   ├── toast.ts                 # Система toast-уведомлений
-│   ├── oui.ts                   # OUI vendor lookup
-│   ├── demoData.ts              # Демо-генератор
-│   └── wigle.ts                 # Wigle CSV экспорт
-├── composables/
-│   └── useContextAction.ts      # Композабл для действий над AP/BLE
-├── types/                       # TypeScript definitions
-│   ├── index.ts                 # Core types (AccessPoint, BLEDevice, etc.)
-│   ├── parser.ts                # ParserContext, FirmwareProfile
-│   ├── serial.ts                # SerialPortInfo, TerminalLineType
-│   └── command.ts               # CommandDef, Scenario
-├── assets/
-│   └── style.css                # Tailwind + компонентные классы
-├── App.vue                      # Root: tabs + header + status bar + toasts
-├── main.js                      # Точка входа
-├── env.d.ts                     # Web Serial API type declarations
-├── tsconfig.json                # TypeScript config (incremental migration)
-└── vite.config.ts               # Vite + vue-tsc checker
-```
-
----
-
 ## Быстрый старт
 
 ```bash
-git clone https://github.com/bapyha-netizen/marauder-ui.git
+git clone <repo-url>
 cd marauder-ui
 npm install
 npm run dev
@@ -155,25 +89,21 @@ npm run dev
 
 ## Подключение к ESP32
 
-1. Подключите ESP32 к USB
-2. Откройте `http://localhost:3000` в Chrome/Edge
+1. Подключите ESP32 к USB (используйте data-кабель)
+2. Откройте `http://localhost:3010` в Chrome/Edge
 3. Нажмите **Connect** в правом верхнем углу
 4. В появившемся диалоге выберите порт ESP32 (обычно CP2102 или CH340)
 5. После подключения загорится зелёный индикатор и появится статус-бар
 
 **Поддерживаемые USB-устройства:**
+
 | Vendor | Чип | USB VID:PID |
 |--------|-----|-------------|
 | Silicon Labs | CP2102 | `10C4:EA60` |
 | WCH | CH340 | `1A86:7523` |
 | FTDI | FT232 | `0403:6001` |
 | WCH | CH343 | `1A86:55D4` |
-| Espressif | ESP32-S2 | `303A:1001` |
-
-**Если не подключается:**
-- Убедитесь, что ESP32 не занят другим приложением (Arduino IDE, PuTTY)
-- Нажмите **RST** на ESP32 и попробуйте снова
-- Проверьте драйвер: [CH341SER](https://www.wch.cn/download/CH341SER_EXE.html)
+| Espressif | ESP32-S2/S3 | `303A:1001` |
 
 ---
 
@@ -183,544 +113,303 @@ npm run dev
 
 | Вкладка | Содержание |
 |---------|-----------|
-| 📊 **Dashboard** | Live Output (1/3 слева), статистика AP/Stations/BLE/Pkts (2/3 справа), топ-10 AP, лента событий, кнопки по категориям |
-| 📶 **APs** | Таблица AP с сортировкой по RSSI/ESSID/Channel/Stations, поиск, раскрытие станций по клику, цветовая индикация сигнала |
-| 🔵 **BLE** | Таблица BLE-устройств с автоопределением типа (AirTag/Speaker/BLE), OUI vendor lookup, multi-select для массовых атак, сортировка по Signal/Name/Type/Packets |
-| 🔊 **Probes** | Таблица probe-запросов от клиентов |
-| ⚡ **Scenarios** | Карточки 20 сценариев, запуск с пошаговым выполнением и прогресс-баром |
-| ❓ **Help** | Поиск по всем командам, копирование по клику, секция со сценариями |
+| 📊 **Dashboard** | Live Output с виртуальным скроллом (рендерится ~40 строк из 2000), статистика AP/BLE/Pkts, топ-10 AP, лента событий, группа кнопок по категориям |
+| 📶 **APs** | Таблица AP с сортировкой (RSSI/Name/Channel/Clients), поиском (debounced 200ms), раскрытием станций, sparkline истории RSSI |
+| 🔵 **BLE** | Таблица BLE с автоопределением типа (AirTag/Speaker/BLE), multi-select для массовых атак |
+| 📱 **Probes** | Таблица probe-запросов |
+| ⚡ **Scenarios** | Карточки 16 сценариев, пошаговое выполнение с прогресс-баром и немедленной остановкой через AbortController |
+| ❓ **Help** | Поиск по всем командам, копирование по клику |
 
-### Status Bar (всегда внизу)
+### Status Bar
 
-При подключении отображает: статус соединения, количество AP/BLE/Pkts и длительность сессии.
+При подключении отображает: статус, количество AP/BLE/Probes/Pkts, длительность сессии.
 
 ### Emergency Stop
 
-Красная кнопка **■ Stop** в хедере (видна при подключении) — отправляет `stopscan` на ESP32 и показывает toast-уведомление.
+Красная кнопка **■ Stop** в хедере — отправляет `stopscan` на ESP32.
 
-### Toast-уведомления
+### AppActionBar
 
-Всплывают в правом верхнем углу при коннекте/дисконнекте/экстренной остановке. Автоматически исчезают через 3 секунды, клик закрывает досрочно.
-
-### Панель команд (CommandBuilder)
-
-Все команды в едином `flex-wrap` контейнере, сгруппированы по категориям. При наведении — тултип с русским описанием. Снизу поле для произвольной команды.
-
-**9 групп:**
-| Группа | Команд | Тип |
-|--------|--------|-----|
-| 📡 Сканирование | 11 | scanall, sniffbeacon, sniffprobe, sniffdeauth, sniffpmkid, sniffraw и др. |
-| ⚡ Атаки | 13 | deauth, beacon (random/list/clone/funny), probe, rickroll, badmsg, sleep, sae, csa, quiet |
-| 🔵 Bluetooth | 19 | sniffbt (с фильтрами + колонки), blespam (11 типов), sniffskim, spoofat |
-| 📋 Списки | 6 | list -a/-c/-s/-t/-p/-i |
-| ✅ Выбор | 8 | select, clearlist, фильтры contains/equals |
-| 🏷 SSID | 6 | ssid gen/add/remove, save/load |
-| 🎭 MAC | 4 | randapmac, randstamac, cloneapmac, clonestamac |
-| 🌐 Сеть | 10 | join, add, pingscan, arpscan, portscan |
-| ⚙ Админ | 18 | info, settings, channel, reboot, led, gps, wardrive, evilportal, karma, ls, update, packetcount, mactrack, sigmon |
+В хедере отображает текущее выполняемое действие, количество выбранных AP, последний результат.
 
 ---
 
-## Команды (полный справочник)
-
-Полный список доступен во вкладке **Help** с поиском и копированием по клику.
-
-### Сканирование и сниффинг
-
-| Команда | Описание |
-|---------|----------|
-| `scanall` | Сканирование AP и станций одновременно |
-| `sniffbeacon` | Перехват beacon-фреймов (AP) |
-| `sniffprobe` | Перехват probe-запросов от клиентов |
-| `sniffdeauth` | Перехват deauth-пакетов |
-| `sniffpmkid [-c ch] [-d] [-l]` | Захват PMKID (EAPOL): `-d` с deauth, `-l` только по списку |
-| `sniffraw` | Перехват всех WiFi-пакетов (raw) |
-| `sniffsae` | Перехват SAE (WPA3) commit-пакетов |
-| `sniffpwn` | Обнаружение Pwnagotchi |
-| `sniffpinescan` | Обнаружение WiFi Pineapple |
-| `sniffmultissid` | Обнаружение Multi-SSID устройств |
-| `sigmon` | Мониторинг уровня сигнала выбранных AP |
-| `mactrack` | Отслеживание MAC-адресов |
-| `packetcount` | Счётчик пакетов по типам |
-| `stopscan` | Остановка сканирования/атаки |
-
-### Атаки
-
-| Команда | Описание |
-|---------|----------|
-| `attack -t deauth [-c]` | Deauth-флуд, `-c` по списку станций |
-| `attack -t beacon -l` | Beacon spam из списка SSID |
-| `attack -t beacon -r` | Beacon spam случайными SSID |
-| `attack -t beacon -a` | Beacon spam клонами выбранных AP |
-| `attack -t probe` | Probe-запросы от выбранных AP |
-| `attack -t rickroll` | Beacon с текстами Rick Astley |
-| `attack -t funny` | Beacon с забавными SSID |
-| `attack -t badmsg` | Bad-Message атака (EAPOL) |
-| `attack -t sleep` | Association Sleep атака |
-| `attack -t sae` | SAE Commit атака (WPA3) |
-| `attack -t csa` | Channel Switch Announcement |
-| `attack -t quiet` | Quiet Time атака |
-
-### Bluetooth
-
-| Команда | Описание |
-|---------|----------|
-| `sniffbt` | Сканирование всех BLE-устройств |
-| `sniffbt -t airtag` | Поиск AirTag |
-| `sniffbt -t flipper` | Обнаружение Flipper Zero |
-| `sniffbt -t flock` | Обнаружение Flock Penguin |
-| `sniffbt -t meta` | Обнаружение Meta/Ray-Ban |
-| `sniffbt -t speaker` | Поиск Bluetooth-колонок |
-| `sniffbt -t jbl` | Обнаружение JBL колонок |
-| `sniffbt -t bose` | Обнаружение Bose колонок |
-| `sniffbt -t sony` | Обнаружение Sony колонок |
-| `sniffbt -t marshall` | Обнаружение Marshall колонок |
-| `sniffskim` | Поиск BLE-скиммеров (HC-03/05/06) |
-| `blespam -t all` | Все типы BLE-спама сразу |
-| `blespam -t sourapple` | BLE-спам Apple (Sour Apple) |
-| `blespam -t applejuice` | Apple Juice BLE-спам |
-| `blespam -t google` | Google Fast Pair спам |
-| `blespam -t samsung` | Samsung Galaxy Watch спам |
-| `blespam -t windows` | Microsoft Swift Pair спам |
-| `blespam -t speaker` | Спам на Bluetooth-колонки (общий) |
-| `blespam -t jbl` | Спам на JBL колонки |
-| `blespam -t bose` | Спам на Bose колонки |
-| `blespam -t sony` | Спам на Sony колонки |
-| `blespam -t marshall` | Спам на Marshall колонки |
-| `spoofat -t <index>` | Спуфинг AirTag по индексу из list -t |
-
-### Списки
-
-| Команда | Описание |
-|---------|----------|
-| `list -a` | Список AP с индексами, каналом и RSSI |
-| `list -c` | Список станций (сгруппированы по AP) |
-| `list -s` | Список SSID |
-| `list -t` | Список AirTag |
-| `list -p` | Список probe-запросов |
-| `list -i` | Список IP-адресов |
-
-### Выбор целей и управление списками
-
-| Команда | Описание |
-|---------|----------|
-| `select -a <idx/all>` | Выбрать AP |
-| `select -c <idx/all>` | Выбрать станцию |
-| `select -a -f "equals <name>"` | Фильтр: точное совпадение SSID |
-| `select -a -f "contains <name>"` | Фильтр: частичное совпадение |
-| `select -s <idx>` | Выбрать SSID |
-| `clearlist -a` | Очистить список AP |
-| `clearlist -c` | Очистить список станций |
-| `clearlist -s` | Очистить список SSID |
-| `ssid -a -g <n>` | Сгенерировать N случайных SSID |
-| `ssid -a -n <name>` | Добавить SSID по имени |
-| `ssid -r <idx>` | Удалить SSID по индексу |
-| `save -a / save -s` | Сохранить AP/SSID на SD |
-| `load -a / load -s` | Загрузить AP/SSID с SD |
-
-### MAC-адреса
-
-| Команда | Описание |
-|---------|----------|
-| `randapmac` | Случайный MAC для AP |
-| `randstamac` | Случайный MAC для STA |
-| `cloneapmac -a <idx>` | Клонировать MAC выбранной AP |
-| `clonestamac -s <idx>` | Клонировать MAC выбранной станции |
-
-### Сеть и утилиты
-
-| Команда | Описание |
-|---------|----------|
-| `join -a <idx> -p <pass>` | Подключиться к WiFi |
-| `add -a -b <mac> [-ch <ch>] [-e <ssid>]` | Добавить AP вручную |
-| `add -c -b <mac> -ap <idx>` | Добавить станцию к AP |
-| `pingscan` | Ping-сканирование сети |
-| `arpscan` | ARP-сканирование |
-| `portscan -a -t <ip>` | Полный порт-скан |
-| `portscan -s <ssh/http/https>` | Сканирование конкретного порта |
-| `evilportal -c start/setap/sethtml` | Evil Portal |
-| `karma -p <idx>` | Karma-атака |
-| `channel -s <n>` | Переключить канал (1-13) |
-| `info` | Информация о системе |
-| `info -a <idx>` | Детальная информация об AP |
-| `settings` | Показать/изменить настройки |
-| `reboot` | Перезагрузка ESP32 |
-| `led -s <hex>` / `led -p rainbow` | Управление LED |
-| `brightness -s <0-9>` | Яркость дисплея |
-| `ls <dir>` | Список файлов на SD |
-| `update -s` | Обновление с SD |
-| `gpsdata` / `nmea` | GPS-данные |
-| `gpspoi -s/-m/-e` | GPS POI |
-| `gpstracker -c start/stop` | GPS-трекер |
-| `wardrive` | Вардрайвинг (требуется GPS) |
-| `wardrivepoi <label>` | Отметить POI |
-
----
-
-## Сценарии
-
-20 готовых сценариев во вкладке **Scenarios**. Пошаговое выполнение с прогресс-баром и возможностью отмены.
-
-| Сценарий | Шаги | Предупреждение |
-|----------|------|----------------|
-| **Quick Recon** | scanall → list -a → list -c → sniffpmkid -d | — |
-| **Beacon Flood** | ssid -a -g 50 → list -s → attack -t beacon -l | ⚠️ |
-| **Deauth Flood** | scanall → list -a (input) → select -a → attack -t deauth | ⚠️ |
-| **Deauth Targeted** | scanall → list -c → attack -t deauth -c | ⚠️ |
-| **AP Clone Spam** | scanall → list -a (input) → select -a → attack -t beacon -a | ⚠️ |
-| **Clone + Deauth** | scanall → list -a (input) → select -a → beacon -a → deauth | ⚠️ |
-| **PMKID Capture** | scanall → list -a (input) → select -a → sniffpmkid -d -l | — |
-| **BLE Scan** | sniffbt | — |
-| **BLE Discovery** | sniffbt → sniffbt -t airtag → sniffbt -t flipper → sniffbt -t meta | — |
-| **AirTag Hunt** | sniffbt -t airtag → list -t | — |
-| **BLE Spam** | blespam -t all | ⚠️ |
-| **Funny Beacon** | attack -t funny | ⚠️ |
-| **Evil Portal** | scanall → list -a (input) → setap → evilportal -c start | ⚠️ |
-| **Network Scan** | pingscan → arpscan → list -i | — |
-| **GPS Wardrive** | gpsdata → wardrive | — |
-| **MAC Randomize** | randapmac → randstamac | ⚠️ |
-| **Save Session** | scanall → list -a → save -a → save -s | — |
-| **AP Info Dump** | list -a → info -a {idx} (для каждого AP) | — |
-| **Speaker Hunter** | sniffbt → sniffbt -t speaker/jbl/bose/sony/marshall → list → blespam -t speaker | ⚠️ |
-| **Speaker Kill** | sniffbt → blespam -t all | ⚠️ |
-
----
-
-## Speaker Hunter
-
-Набор инструментов для поиска и атаки на Bluetooth-колонки.
-
-### Как работает
-
-1. **Сканирование** — `sniffbt -t speaker` ищет BLE-устройства с сигнатурами колонок
-2. **Определение бренда** — целевой скан по каждому бренду (JBL/Bose/Sony/Marshall)
-3. **Атака** — `blespam -t speaker` отправляет BLE-пакеты, вызывающие popup-уведомления на колонке
-4. **Отключение** — постоянный спам забивает канал связи колонки
-
-### Доступные команды
-
-| Команда | Описание |
-|---------|----------|
-| `sniffbt -t speaker` | Поиск всех BLE-колонок |
-| `sniffbt -t jbl` | Поиск JBL колонок |
-| `sniffbt -t bose` | Поиск Bose колонок |
-| `sniffbt -t sony` | Поиск Sony колонок |
-| `sniffbt -t marshall` | Поиск Marshall колонок |
-| `blespam -t speaker` | Спам на все колонки |
-| `blespam -t jbl` | Спам на JBL |
-| `blespam -t bose` | Спам на Bose |
-| `blespam -t sony` | Спам на Sony |
-| `blespam -t marshall` | Спам на Marshall |
-
-### Сценарии
-
-- **Speaker Hunter** — полное сканирование всех брендов + атака
-- **Speaker Kill** — агрессивная атака всеми типами BLE-спама
-
-### Кнопки в Dashboard
-
-В разделе **BLE** доступны:
-- 🔵 **Scan**: Speakers, JBL, Bose, Sony, Marshall
-- ⚠️ **Attack**: Spk Spam, JBL Spam, Bose Spam, Sony Spam, Mshall Spam
-
-> **Важно:** Команды `blespam -t speaker/jbl/bose/sony/marshall` требуют поддержки в прошивке ESP32 Marauder. Если прошивка не поддерживает эти варианты, `blespam -t all` работает как универсальная атака.
-
----
-
-## Парсер данных
-
-Parser Engine автоматически преобразует вывод Marauder в структурированные данные.
-
-### Поддерживаемые форматы
-
-| Тип | Пример вывода | Куда |
-|-----|--------------|------|
-| AP beacon | `-45 Ch: 1 AA:BB:CC:DD:EE:FF ESSID: MyWiFi` | apStore |
-| AP list | `[0][CH:6] MyWiFi -65 (selected)` | apStore |
-| Station detect | `5: ap: AA:BB:CC:DD:EE:FF -> sta: 11:22:33:44:55:66` | apStore |
-| Station list | `[0] MyWiFi -65:` / ` [0] AA:BB:CC:DD:EE:FF` | apStore |
-| Deauth sniff | `-65 Ch: 6 SRC -> DST` | events |
-| Probe sniff | `-45 Ch: 1 Client: MAC Requesting: SSID` | events |
-| PMKID/EAPOL | `Received EAPOL: AA:BB:CC:DD:EE:FF` | events |
-| BLE sniff | `-45 Device: iPhone` | bleStore |
-| BLE generic | `-45 AA:BB:CC:DD:EE:FF` | bleStore |
-| BLE Meta | `Meta Device: -45 RayBan` | bleStore |
-| Signal mon | `MyWiFi RSSI: -45` | apStore |
-
----
-
-## Demo-режим
+## Демо-режим
 
 1. ESP32 **не должен быть подключён**
 2. Нажмите **Try Demo** в хедере
 3. Интерфейс заполнится демо-данными: AP, BLE, терминал
 4. Каждые 5 секунд — новые данные
-5. Нажмите **Exit Demo** для выхода (очищает все данные)
+5. Нажмите **Exit Demo** для выхода
 
 ---
 
-## Советы
+## Разработка
 
-### ESP32 не определяется
-- Установите драйвер [CH341SER](https://www.wch.cn/download/CH341SER_EXE.html)
-- Попробуйте другой USB-кабель (не только зарядный)
-- Проверьте Диспетчер устройств → COM-порты
-
-### Web Serial не работает
-- Только Chrome или Edge (89+)
-- Сайт по `localhost` или HTTPS (`file://` не работает)
-- Проверьте, что порт не занят другим приложением
-
-### Медленное сканирование после очистки
-- ESP32 переходит в monitor mode после команд
-- Перед новым сканированием нажмите **Clear List** (отправляет `clearlist -a`)
-- Затем **Scan All** — сканирование будет быстрым
-
-### AP не отображаются
-- Запустите `sniffbeacon` или `scanall` — дайте 5-10 секунд
-- `list -a` — вывод накопленного списка
-
-### Ошибка "Port is in use"
 ```bash
-netstat -ano | findstr :3000
-taskkill /PID <номер> /F
+# Установка
+npm install
+
+# Dev-сервер на http://localhost:3010
+npm run dev
+
+# Проверка типов
+npx vue-tsc --noEmit
+
+# Линтер
+npm run lint
+
+# Тесты
+npx vitest run
+
+# Сборка
+npm run build
+
+# Превью собранного
+npm run preview
+```
+
+### Скрипты
+
+| Команда | Описание |
+|---------|----------|
+| `npm run dev` | Dev-сервер с HMR на порту 3010 |
+| `npm run build` | Production-сборка в `dist/` |
+| `npm run preview` | Превью собранного проекта |
+| `npm run lint` | ESLint проверка |
+| `npx vue-tsc --noEmit` | TypeScript проверка |
+| `npx vitest run` | Запуск тестов |
+| `npx playwright test` | E2E тесты |
+
+---
+
+## Сборка и деплой
+
+```bash
+# Production сборка
+npm run build
+
+# Результат в dist/
+ls dist/
+
+# Деплой на GitHub Pages (из dist/)
+npx gh-pages -d dist
+```
+
+### GitHub Pages
+
+Проект настроен на деплой в `/marauder-ui/` (см. `vite.config.ts: base: '/marauder-ui/'`).
+
+Production-сборка включает:
+- ✅ Content-Security-Policy заголовки (CSP)
+- ✅ PWA (manifest, service worker, иконки)
+- ✅ Source maps (опционально, настраивается в vite.config.ts)
+- ✅ Tree-shaking, код-сплиттинг, CSS минификация
+
+---
+
+## Тестирование
+
+### Unit-тесты (Vitest)
+
+```bash
+npx vitest run
+```
+
+Тесты покрывают:
+- OUI vendor lookup (26 тестов)
+- Parser Engine (62 теста)
+- Serial Reconnect (25 тестов)
+- Action Dispatcher
+- IDB persistence
+
+### E2E тесты (Playwright)
+
+```bash
+npx playwright test
 ```
 
 ---
 
-## Производительность и архитектура
+## Структура проекта
 
-### Оптимизации парсера
+```
+src/
+├── stores/                      # Pinia stores (TypeScript)
+│   ├── serialStore.ts           # Serial-порт, терминал, команды
+│   ├── apStore.ts               # Точки доступа + станции
+│   ├── bleStore.ts              # BLE-устройства
+│   ├── dashboardStore.ts        # Статистика, события
+│   └── probeStore.ts            # Probe-запросы
+├── i18n/                        # Переводы
+│   ├── en.ts                    # Английский
+│   └── ru.ts                    # Русский
+├── services/                    # Business logic
+│   ├── i18n.ts                  # i18n: t(), tA(), locale
+│   ├── parserEngine.ts          # Парсер-диспетчер
+│   ├── firmwareProfiles/
+│   │   ├── marauderV1.ts        # 14 парсеров для текущей прошивки
+│   │   └── index.ts             # Реестр профилей
+│   ├── serialReader.ts          # Read loop, TextDecoder
+│   ├── commandExecutor.ts       # send/sendAndWait/sendSequence
+│   ├── serialReconnect.ts       # Auto-reconnect
+│   ├── commandRegistry.ts       # 77 команд, 9 групп, 16 сценариев
+│   └── commandMeta.ts           # Метаданные команд
+├── components/
+│   ├── dashboard/               # DashboardView
+│   ├── ap/                      # APExplorer
+│   ├── ble/                     # BLEExplorer
+│   ├── probes/                  # ProbesView
+│   ├── workflow/                # WorkflowBuilder
+│   ├── help/                    # HelpGuide
+│   └── ...
+├── composables/
+│   └── useContextAction.ts      # Композабл для действий
+├── utils/                       # Утилиты
+│   ├── sanitize.ts              # Санитизация текста
+│   ├── uuid.ts                  # UUID v4
+│   ├── logger.ts                # Ring-buffer логгер
+│   ├── metrics.ts               # Счётчики производительности
+│   ├── persist.ts               # Debounced IndexedDB
+│   ├── idb.ts                   # IndexedDB wrapper
+│   ├── format.ts                # Форматирование
+│   ├── toast.ts                 # Toast-уведомления
+│   ├── oui.ts                   # OUI vendor lookup
+│   ├── clipboard.ts             # Буфер обмена
+│   └── wigle.ts                 # CSV экспорт
+├── types/                       # TypeScript definitions
+├── assets/
+│   └── style.css                # Tailwind
+└── App.vue                      # Root component
+```
 
-- **O(1) dispatch по первому символу** — `_DISPATCH` map с 14 кодпоинтами
-- **Firmware profiles** — парсер вынесен в `services/firmwareProfiles/marauderV1.ts` для поддержки разных версий прошивки
-- **O(1) поиск AP** — maintained indexes `_byBssid` и `_byIndex`
+---
 
-### Рефакторинг serialStore (SRP)
+## Безопасность
 
-Ранее `serialStore.js` содержал 6+ ответственностей. Теперь:
+### CSP в production
 
-| Модуль | Ответственность |
-|--------|----------------|
-| `serialStore.ts` | Состояние, терминал, public API |
-| `services/serialReader.ts` | Read loop, TextDecoder, buffer trimming |
-| `services/commandExecutor.ts` | sendCommand, sendAndWait, sendSequence |
-| `services/serialReconnect.ts` | Auto-reconnect, device plug/unplug |
+```
+default-src 'self'
+script-src 'self'
+style-src 'self' 'unsafe-inline'
+img-src 'self' data:
+connect-src 'self' https://*.tile.openstreetmap.org
+font-src 'self' data:
+worker-src 'self' blob:
+```
 
-### Централизованная санитизация
+### Санитизация данных
 
-- `utils/sanitize.ts` — `sanitizeText()`, `sanitizeAscii()`, `normalizeMac()`, `safeParseInt()`
-- Все входящие данные проходят через `sanitizeText()` перед отображением
-- Защита от ANSI escape, control characters, non-printable unicode
+- `sanitizeText()` — удаление ANSI-кодов, control chars, non-printable Unicode, bidi/zero-width символов
+- HTML-фильтрация по белому списку тегов (`span`, `b`, `i`, `u`, `br`)
+- Удаление `on*` атрибутов (XSS)
+- Ограничение длины (4096 символов)
 
-### Сервисы общего назначения
+### Excel Formula Injection
 
-- `utils/uuid.ts` — RFC 4122 v4 UUID + `recordKey()` для IndexedDB (вместо `JSON.stringify`)
-- `utils/logger.ts` — Ring-buffer logger с уровнями (debug/info/warn/error)
-- `utils/metrics.ts` — Rolling counters: lines/sec, parser dispatches, misses
+CSV-экспорт экранирует `=+\-@\t\r|` префиксы (OWASP), удаляет zero-width и bidi символы.
 
-### Оптимизации stores
+### USB vendor whitelist
 
-- **Maintained indexes** — `_byBssid` и `_byIndex` обновляются инкрементально
-- **shallowRef + triggerRef** — мутации in-place вместо `new Map(...)` копирования
-- **push/shift вместо spread** — O(1) вместо O(N) для FIFO буферов
-- **debounced + throttle save** — debounce 1s + max wait 5s + beforeunload flush
+Только известные USB-чипы: CP2102, CH340, CH343, FT232, ESP32-S2/S3.
 
-### Оптимизации UI
+### Дополнительно
 
-- **Windowed terminal rendering** — рендерится только ~40 видимых строк из 2000
-- **v-text вместо v-html** — нативное экранирование Vue
+- `data:` URL запрещён в script-src
+- `blob:` разрешён только для worker-ов
+- `'unsafe-inline'` разрешён только для style-src (требуется Tailwind)
+- `'unsafe-eval'` разрешён только в dev-режиме
 
-### Batch processing
+---
 
-- **queueMicrotask** — батчит строки в один microtask, не блокирует serial read loop
+## Производительность
 
-### Безопасность
+### Парсер
 
-- **CSP strict в production** — `script-src 'self'` без `unsafe-eval`/`unsafe-inline` (Vite-плагин `cspPlugin()`)
-- **XSS защита** — HTML-фильтрация по белому списку тегов (`span`, `b`, `i`, `u`, `br`), удаление `on*` атрибутов
-- **Excel Formula Injection** — CSV-экспорт экранирует `=+−@` префиксы (OWASP)
-- **USB vendor whitelist** — только CP2102, CH340, FTDI, ESP32-S2
-- **beforeunload persistence** — данные сохраняются при закрытии вкладки
-- **Memory bounds** — max 1000 APs, 2000 BLE devices в store, LRU eviction
-- **Graceful disconnect** — очистка terminalOutput при отключении
-- **ARIA labels** — accessibility для кнопок и навигации
-- **Keyboard navigation** — tabindex на строках таблиц AP/BLE
-- **Password visible warning** — предупреждение при вводе пароля WiFi в команде join
+- **O(1) dispatch** по первому символу строки (14 кодпоинтов)
+- **Кэшированный контекст** — `useApStore()`/`useBleStore()`/`useDashboardStore()` вызываются один раз
+- **queueMicrotask** — батчинг строк в один microtask
+- **14 парсеров** — каждый парсит строго свой формат вывода
+
+### UI
+
+- **Виртуальный скролл терминала** — рендерится ~40 строк из 2000
+- **Debounced поиск** — 200ms debounce в таблицах AP/BLE
+- **rAF-throttle** для scroll-обработчиков
+- **shallowRef + triggerRef** — мутации Map/Set in-place без копирования
+
+### Хранилище
+
+- **LRU eviction** — max 1000 AP, 2000 BLE, 500 probes
+- **Debounced IndexedDB** — 1s debounce + 5s max wait + beforeunload flush
+- **Инкрементальные индексы** — `_byBssid`, `_byIndex` без полного rebuilt на каждое изменение
 
 ### Метрики
 
-| Метрика | До | После |
-|---------|-----|-------|
-| Parser throughput | 1x | 10-50x |
-| Store update alloc | O(N) copy | O(1) mutation |
-| Terminal render | 2000 nodes | ~40 visible |
-| SerialStore responsibilities | 6+ | 4 modules |
-| IDB key generation | JSON.stringify | UUID/recordKey |
-| Data sanitization | ad-hoc | centralized |
+| Метрика | Значение |
+|---------|----------|
+| Parser throughput | 10-50x (O(1) dispatch) |
+| Terminal render | ~40 DOM nodes (виртуальный скролл) |
+| Store update | O(1) mutation (shallowRef + triggerRef) |
+| IndexedDB write | Debounced 1-5s, batch |
 
 ---
 
 ## Changelog
 
-### v0.6.0 (2026-06-04) — i18n, MIT License & Security Audit Fixes
+### v0.7.0 (2026-06-05) — Full Audit & Bugfix
 
-- **🌐 i18n** — добавлено переключение русского/английского языка интерфейса:
-  - Кнопка EN/RU в хедере, язык сохраняется в localStorage
-  - Все строки интерфейса переведены на русский и английский
-  - Описания команд и сценариев переключаются между языками
-- **📄 MIT License** — добавлен файл LICENSE
-- **🔒 XSS** — белый список HTML-тегов в `sanitizeText()`, удаление `on*` атрибутов
-- **🏛️ Window globals** — удалены `__setActiveProfile`/`__registerProfile`, заменены на прямые импорты
-- **🔑 Password warning** — предупреждение при вводе пароля WiFi в команде `join`, поле `type="password"`
-- **🧹 Sanitize** — убран мёртвый регекс `[\uD800-\uDFFF]` из `_NON_PRINTABLE`
-- **🗑️ Чистка** — удалена пустая директория `src/components/terminal/`
-- **📐 ESLint** — добавлена базовая конфигурация `.eslintrc.cjs`
+**CRITICAL Fixes:**
+- **C-08**: ProbesView — кнопка Clear отправляла `clearlist -c` на ESP32 (очищала станции вместо probes). Теперь очистка только локальная.
+- **C-12**: `persist.ts` — исправлен расчёт `elapsed` при первом вызове `debouncedSave`
+- **C-13**: `wigle.ts` — расширена защита от Excel Formula Injection (добавлены `\t\r|`, zero-width/bidi фильтрация)
 
-### v0.5.3 (2026-06-04) — Security Hardening & TypeScript Migration Complete
+**HIGH Fixes:**
+- **H-01**: `serialStore.ts` — добавлен `_isConnecting` guard против race condition двойного connect
+- **H-08**: `WorkflowBuilder.vue` — `forEachAP` ограничен 50 AP, таймаут снижен с 5s до 2s
+- **H-09/A-03**: `sendAndWait` — добавлена поддержка `AbortSignal`; Workflow использует `AbortController` для мгновенной остановки
+- **H-11**: `ConfirmDialog.vue` — защита от двойного клика (guard + `disabled`)
+- **H-19**: `App.vue` — `beforeunload` теперь синхронный (порт закрывается, а не async sendStop)
+- **H-23**: `CommandBuilder.vue` — 4 динамических `import('../utils/toast')` заменены на статический
+- **H-24**: `PWAInstallPrompt.vue` — `install()` обёрнут в try/catch/finally
+- **H-26**: `marauderV1.ts` — реализован `resetState()` (сброс `_infoAPIndex`, `_ipListBuffer`)
+- **H-27**: `marauderV1.ts` — BLE-устройства без MAC больше не сливаются в одну запись
 
-- **TypeScript Migration Complete** — Полная миграция на TypeScript с 0 ошибками компиляции
-  - Все 5 stores, 7 services, 11 utils, 1 composable, 4 type definition files
-  - Устранены 41 TypeScript ошибка компиляции
-  - Добавлены строгие типы для всех API и данных
-  - Улучшена безопасность типов и IntelliSense
+**CRITICAL Architecture:**
+- **A-01**: `serialStore.sendAndWait` теперь включает side-эффекты для `clearlist -a/-c` (раньше они срабатывали только через `sendCommand`)
+- **A-02/A-03**: AbortController интегрирован в WorkflowBuilder для немедленного прерывания
 
-- **Security Hardening** — Усиление защиты и производительности
-  - **A5: CSP strict в production** — Vite-плагин `cspPlugin()` через `transformIndexHtml`. В build-режиме CSP: `script-src 'self'` (без `unsafe-eval`/`unsafe-inline`). Dev сохраняет relaxed CSP для HMR.
-  - **Enhanced HTML sanitization** — Улучшенная защита от XSS атак через `sanitizeText()`
-  - **Silent error handling** — Убраны утечки console.log/error в продакшене
-  - **Input validation** — Защита от IDB cache poisoning и double-resolve ошибок
+**MEDIUM Fixes:**
+- Debounced поиск (200ms) в APExplorer
+- rAF-throttle для `onTerminalScroll`
+- Debounced (200ms) `checkMobile` в App.vue
+- clipboard.ts — размерный лимит (1MB) + `readOnly` на textarea
+- toast.ts — глобальный throttle (max 100ms между toast)
+- PWAInstall — localStorage для dismissed
+- MobileBlocker — улучшенная детекция iPad
+- main.js — `.catch()` для PWA registration
 
-- **Performance Optimizations** — Оптимизации производительности
-  - **O(1) terminal operations** — Заменены O(N) unshift на O(1) slice операции
-  - **Computed properties** — Удалены ручные snapshot refs в favor of computed properties
-  - **Immutable updates** — Исправлены смешанные паттерны мутации в stores
-  - **Profile-aware parsing** — Внедрена система firmware profiles для разных версий прошивки
+### v0.6.1 (2026-06-04) — Language Update Fix
 
-- **BLE Explorer redesign** — полный перепис компонента:
-  - Multi-select (checkbox + click) с Select All / Deselect All
-  - Contextual action bar: Sniff, Stop, Spoof AirTag, Speaker Spam, BLE Spam All, Copy MACs
-  - Сортировка по Signal / Name / Type / Packets
-  - Auto-detection типа: AirTag (red), Speaker (amber), BLE (gray)
-  - Per-row actions: Copy MAC, Spoof (AirTag only), Spam (Speaker only)
-  - ConfirmDialog для деструктивных действий
+- EN/RU переключение теперь корректно сохраняется
+- Исправления мелких UI-строк
 
-- **BLE device identification** — OUI vendor lookup через `lookupVendor(mac)` для всех BLE-устройств (~1148 MAC prefixes). Поиск фильтрует по vendor.
-- **BLE cleanup removal** — убран 30-секундный таймер автоудаления устройств. Устройства сохраняются до явной очистки. Добавлен `MAX_BLE_DEVICES = 2000` с LRU eviction.
-- **Speaker auto-detection** — автоматическое определение колонок по имени (jbl, bose, sony, marshall, etc.)
+### v0.6.0 (2026-06-04) — i18n & Security
 
-- **Code Quality Improvements** — Улучшения качества кода
-  - **Type safety** — Устранены 27+ type casts (`as any`) для лучшей типизации
-  - **Error handling** — Улучшена обработка ошибок с silent logging
-  - **Memory management** — Убраны утечки setTimeout timers
-  - **Accessibility** — Добавлены ARIA labels и улучшена навигация с клавиатуры
-  - **Global singleton refactoring** — Переработан actionDispatcher для удаления глобального паттерна
-
-### v0.5.3 (2026-06-04) — Enhanced Edition
-
-**🔧 HIGH Priority Fixes:**
-- **S-02**: Removed console.log/error leaks - 6 instances fixed
-- **S-03**: Enhanced HTML sanitization with comprehensive security features
-- **S-04**: Improved firmware profile integrity validation
-- **P-03**: Optimized sorting by removing snapshot refs and using computed properties
-- **P-04**: Replaced O(N) unshift with O(1) slice operations for terminal output
-- **P-05**: Fixed mixed mutation patterns in stores
-
-**🔧 MEDIUM Priority Fixes:**
-- **R-05**: Added requestAnimationFrame for terminal output performance
-- **R-06**: Improved error handling with silent logging
-- **R-07**: Fixed IDB double-resolve issues
-- **R-08**: Added protection against IDB cache poisoning
-- **R-09**: Cleaned up leaked setTimeout timers
-- **R-10**: Fixed data loss in terminal with improved buffer management
-- **Q-01**: Removed 27+ type casts (`as any`) for better type safety
-- **Q-04**: Eliminated double side effects by removing redundant stats updates
-- **Q-06**: Removed redundant null checks (`?? 0`) where regex patterns guarantee valid numbers
-- **A-04**: Added proper label associations for form controls
-- **A-05**: Added missing aria-labels to interactive elements
-- **A-06**: Fixed focus capture issues with proper keyboard handling
-- **U-03**: Enhanced prompt cancel with feedback and accessibility
-- **U-04**: Improved HTML sanitization with comprehensive security features
-- **U-06**: Fixed HTML rendering in terminal output with v-html
-- **U-07**: Removed dead states and improved user guidance
-- **D-03**: Implemented orphaned index validation and conflict resolution
-- **D-04**: Fixed O(n²) stations sorting performance issue
-- **D-05**: Confirmed escHtml function was already properly removed
-- **AR-02**: Refactored actionDispatcher to remove global singleton pattern
-- **AR-03**: Implemented firmware profile awareness in parser engine
-
-**🔧 LOW Priority Enhancements:**
-- **B-04**: Configured source maps for better debugging
-- **B-05**: Added iOS icons (180x180, 152x152, 120x120) with PWA support
-- **B-06**: Optimized UTF-8 scanning with lookup tables and boundary detection
-- **A-07**: Improved color contrast for better accessibility (WCAG AA compliance)
-- **T-06**: Implemented comprehensive E2E testing with Playwright
-- **T-07**: Enhanced OUI tests with 26 test cases and performance validation
-
-**🚀 Key Improvements:**
-- **TypeScript**: 41 errors → 0 errors, strict mode enabled
-- **Performance**: 10-100x optimizations for streaming mode
-- **Security**: Enhanced XSS protection, input validation, memory bounds
-- **Accessibility**: ARIA labels, keyboard navigation, color contrast
-- **Testing**: 298 unit tests + E2E tests coverage
-- **Code Quality**: Removed global state, improved SRP, added comprehensive metrics
-
-### v0.5.1 (2026-06-03) — TypeScript Migration (Completed in v0.5.3)
-
-- Все 5 stores, 7 services, 11 utils, 1 composable, 4 type definition файла мигрированы на TypeScript
-- Остались JS только: `main.js` (entry point), `ouiData.js` (28KB data file)
-- `tsconfig.json`: `strict: false`, `noImplicitAny: false` — 28 `any` типов в 11 файлах
-- 177/177 тестов проходят
-- **Примечание:** Полная миграция и исправление всех TypeScript ошибок завершена в v0.5.3
-
-### v0.5.0 (2026-06-02) — Audit-Driven Refactoring
-
-- **SRP split serialStore** — разделён на 4 модуля:
-  - `serialStore.ts` — состояние, терминал, public API
-  - `services/serialReader.ts` — read loop, TextDecoder, buffer trimming
-  - `services/commandExecutor.ts` — sendCommand, sendAndWait, sendSequence
-  - `services/serialReconnect.ts` — auto-reconnect state machine
-- **ParserEngine firmware profiles** — парсеры вынесены в `services/firmwareProfiles/marauderV1.ts`
-- **Утилиты** — `sanitize.ts`, `uuid.ts`, `logger.ts`, `metrics.ts`
-- 9 bug fixes по результатам deep audit:
-  - **B1**: Exit Demo стирает IndexedDB → убраны `clearAPs()/clearDevices()/clearProbes()` из exit path
-  - **B2**: False "error" в Action Log → regex `/(?:^|\n)\s*(?:\[ERROR\]|error\b|failed\b)/i` вместо `includes('error')`
-  - **B3**: `blespam`/`spoofat` без `needsTarget: true` → добавлено в 12 команд
-  - **B4**: Double Connect error → убран дубликат из handleConnect
-  - **B5**: Select всегда ставил `isSelected: true` → toggle через `!selectedAP.value.isSelected`
-  - **B6**: Workflow "Done ✓" после error → guard `if (!aborted.value)`
-  - **B7**: Dead code `actions = []` → `clearActions()` + import
-  - **B8**: `waitForInput` через `requestAnimationFrame` → `setTimeout(check, 100)`
-  - **B9**: bleStore без device limit → `MAX_BLE_DEVICES = 2000` + eviction
-
-### v0.4.3 (2026-06-01) — Performance Audit
-
-- `terminalOutput` push+shift+triggerRef вместо spread
-- Parser O(1) dispatch по первому символу (14 кодпоинтов)
-- BSSID/index maintained indexes в apStore
-- `eventsReversed` computed вместо `slice().reverse()`
-- `queueMicrotask` batching для serial line processing
-- BLE cleanup 30s timer (позже убран в v0.5.3)
-- Debounced persistence (1s debounce + 5s max wait + beforeunload flush)
+- 🌐 i18n: русский/английский язык (кнопка EN/RU, localStorage)
+- 📄 MIT License
+- 🔒 XSS: белый список HTML-тегов, удаление `on*` атрибутов
+- 🧹 Санитизация: убран мёртвый regex, удалены пустые директории
 
 ---
 
 ## Юридическое предупреждение
 
-**Только для:**
-- Тестирования собственных сетей
-- Лабораторных работ
-- Авторизованных пентестов
-- Образовательных целей
-
-**Запрещено использовать для атак на чужие сети без письменного разрешения.**
-
----
-
-## Лицензия
-
 MIT License. Подробнее см. [LICENSE](LICENSE).
 
+Данное программное обеспечение предназначено **только для образовательных целей** и тестирования безопасности собственных сетей. Несанкционированное использование может нарушать местные и международные законы.
+
 ---
 
-*Документация обновлена 4 июня 2026, версия 0.6.0*
+*Документация обновлена 5 июня 2026, версия 0.7.0*

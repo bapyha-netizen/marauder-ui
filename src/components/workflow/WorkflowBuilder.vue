@@ -166,6 +166,7 @@ const beforeSnapshot = ref(null)
 const cachedResults = ref(null)
 const durationTick = ref(0)
 let _durationInterval = null
+let _abortController = null
 
 const addLog = (msg, icon = '•', color = 'text-slate-400') => {
   const t = new Date()
@@ -246,6 +247,7 @@ const openWorkflow = (wf) => {
 
 const closeWorkflow = () => {
   aborted.value = true
+  _abortController?.abort()
   isRunning.value = false
   selectedWorkflow.value = null
   cachedResults.value = null
@@ -278,6 +280,8 @@ const goToTab = (tab) => {
 const executeWorkflow = async () => {
   const wf = selectedWorkflow.value
   if (!wf) return
+  _abortController = new AbortController()
+  const signal = _abortController.signal
   isRunning.value = true
   completed.value = false
   aborted.value = false
@@ -327,20 +331,27 @@ const executeWorkflow = async () => {
           continue
         }
         const total = indices.length
-        addLog(t('workflows.runningFor', { n: total }), '→', 'text-indigo-400')
-        for (let j = 0; j < total; j++) {
+        const limit = 50
+        const limited = total > limit
+        addLog(limited
+          ? `${t('workflows.runningFor', { n: limit })} (${total} available, first ${limit})`
+          : t('workflows.runningFor', { n: total }), '→', 'text-indigo-400')
+        for (let j = 0; j < Math.min(total, limit); j++) {
           if (aborted.value) break
           const idx = indices[j]
           const subCmd = cmd.replaceAll('{idx}', idx)
           try {
-            await serialStore.sendAndWait(subCmd, 5000)
+            await serialStore.sendAndWait(subCmd, 2000, signal)
             dashStore.incrementCommands()
-            addLog(`[${j + 1}/${total}] idx ${idx}: ${subCmd}`, '⚡', 'text-yellow-400')
+            addLog(`[${j + 1}/${Math.min(total, limit)}] idx ${idx}: ${subCmd}`, '⚡', 'text-yellow-400')
           } catch (e) {
             addLog(t('workflows.failed', { n: i + 1, msg: e.message }), '✕', 'text-red-400')
             aborted.value = true
             break
           }
+        }
+        if (limited && !aborted.value) {
+          addLog(`Showing first ${limit} of ${total} APs`, '⚠', 'text-amber-400')
         }
         if (!aborted.value) {
           addLog(t('workflows.stepDone'), '✓', 'text-emerald-400')
@@ -379,7 +390,7 @@ const executeWorkflow = async () => {
             if (aborted.value) break
             const subCmd = cmd.replaceAll('{input}', item)
             try {
-              await serialStore.sendAndWait(subCmd, 5000)
+              await serialStore.sendAndWait(subCmd, 5000, signal)
               dashStore.incrementCommands()
               addLog(t('workflows.sent', { cmd: subCmd }), '⚡', 'text-yellow-400')
             } catch (e) {
@@ -401,7 +412,7 @@ const executeWorkflow = async () => {
       }
 
       try {
-        await serialStore.sendAndWait(cmd, step.delay ? step.delay + 5000 : 15000)
+        await serialStore.sendAndWait(cmd, step.delay ? step.delay + 5000 : 15000, signal)
         dashStore.incrementCommands()
         addLog(t('workflows.sent', { cmd }), '⚡', 'text-yellow-400')
         if (step.delay && !step.stopManual) {
@@ -421,7 +432,7 @@ const executeWorkflow = async () => {
 
   if (!hasStopManual) {
     try {
-      await serialStore.sendAndWait('stopscan', 5000)
+      await serialStore.sendAndWait('stopscan', 5000, signal)
       addLog(t('workflows.sent', { cmd: 'stopscan (cleanup)' }), '⏹', 'text-slate-400')
     } catch (_) { }
   } else {

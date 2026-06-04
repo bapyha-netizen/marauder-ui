@@ -12,6 +12,8 @@ let nextId = 0
 const _lastToast = new Map<string, number>()
 const _lastToastOrder: string[] = []
 const _MAX_TRACKED = 100
+const _THROTTLE_WINDOW_MS = 100
+let _lastToastTime = 0
 
 export function useToast() {
   /**
@@ -22,8 +24,10 @@ export function useToast() {
    */
   function show(message: string, type: string = 'info', duration: number = 3000): number | undefined {
     const now = Date.now()
+    if (now - _lastToastTime < _THROTTLE_WINDOW_MS) return
     const last = _lastToast.get(message) || 0
     if (now - last < 500) return
+    _lastToastTime = now
     _lastToast.set(message, now)
     _lastToastOrder.push(message)
     if (_lastToastOrder.length > _MAX_TRACKED) {

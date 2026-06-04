@@ -178,7 +178,7 @@ function parseBLESniff(line: string, ctx: ParserContext): boolean {
     } else {
       const name = rawName.trim()
       ctx.bleStore.updateOrAddDevice({
-        mac: `BLE:${name.toUpperCase()}`,
+        mac: `BLE:${name.toUpperCase()}:${Date.now()}`,
         rssi: Number(rssi),
         name,
         lastSeen: new Date()
@@ -404,4 +404,7 @@ export const marauderV1: FirmwareProfile = {
   resetState: () => ({})
 }
 
-export function resetState(): void {}
+export function resetState(): void {
+  _infoAPIndex = -1
+  _ipListBuffer = []
+}

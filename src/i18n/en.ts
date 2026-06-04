@@ -105,6 +105,7 @@ export default {
       sniffProbe: 'Sniff Probe',
       listProbes: 'List Probes',
     },
+    adminActions: 'Admin Actions',
   },
 
   commandBuilder: {
