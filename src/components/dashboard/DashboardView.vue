@@ -1,8 +1,8 @@
 <template>
   <div class="flex-1 min-h-0 min-w-0 flex gap-3">
     <!-- LEFT: Live Output (1/4) -->
-    <div class="w-1/4 flex flex-col min-h-0 min-w-0">
-      <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 flex flex-col flex-1 min-h-0">
+    <div style="display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;width:25%">
+      <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 flex flex-col flex-1 h-0">
         <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700/50 flex-shrink-0">
           <div class="flex items-center space-x-2">
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -33,7 +33,7 @@
           </div>
         </div>
         <div ref="liveRef" @scroll="onTerminalScroll"
-          class="flex-1 min-h-0 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed scrollbar-thin bg-black/30"
+          class="flex-1 h-0 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed scrollbar-thin bg-black/30"
           role="log" aria-live="polite" aria-label="Live serial output">
           <div :style="{ height: spacerTop + 'px' }"></div>
           <div v-for="(line, i) in visibleTerminalLines" :key="visibleStart + i"
@@ -53,8 +53,8 @@
     </div>
 
     <!-- CENTER: Targets list (1/4) -->
-    <div class="w-1/4 flex flex-col min-h-0 min-w-0">
-      <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 flex flex-col flex-1 min-h-0">
+    <div style="display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;width:25%">
+      <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 flex flex-col flex-1 h-0">
         <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700/50 flex-shrink-0">
           <div class="flex items-center space-x-1">
             <button v-for="t in targetTabs" :key="t.id" @click="activeTab = t.id"
@@ -70,7 +70,7 @@
             {{ $t('dashboard.scan') }}
           </button>
         </div>
-        <div class="flex-1 min-h-0 overflow-y-auto p-2 scrollbar-thin">
+        <div class="flex-1 h-0 overflow-y-auto p-2 scrollbar-thin">
           <!-- AP list -->
           <template v-if="activeTab === 'ap'">
             <div v-if="!apStore.sortedAPs.length" class="text-center py-12 text-xs text-slate-600">
@@ -164,7 +164,7 @@
     </div>
 
     <!-- RIGHT: Action panel (1/2) -->
-    <div class="w-1/2 flex flex-col min-h-0 min-w-0 gap-3">
+    <div style="display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;gap:0.75rem;width:50%">
       <!-- Top: Selected target details + actions -->
       <div class="bg-slate-800/50 rounded-xl border border-slate-700/50 p-3 flex-shrink-0 overflow-y-auto max-h-32">
         <div v-if="!selectedTarget && availableActions.length" class="mt-1">
@@ -231,7 +231,7 @@
               class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-700/50 hover:bg-slate-600/50 text-slate-400 hover:text-slate-200 transition-colors">{{ $t('dashboard.clear') }}</button>
           </div>
         </div>
-        <div ref="actionLogRef" class="flex-1 min-h-0 overflow-y-auto p-2 space-y-1.5 scrollbar-thin">
+        <div ref="actionLogRef" class="flex-1 h-0 overflow-y-auto p-2 space-y-1.5 scrollbar-thin">
           <div v-if="!actions.length && !actionRunning" class="text-center py-8 text-xs text-slate-600">
             <div class="text-2xl mb-2">📋</div>
             <div>{{ $t('dashboard.noActionsYet') }}</div>
