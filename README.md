@@ -1,6 +1,6 @@
 # Marauder UI
 
-**Версия:** 0.7.0 (build 2026-06-05) — Full Audit & Bugfix
+**Версия:** 0.7.1 (build 2026-06-05) — Layout & Scrolling Fixes
 **Прошивка:** [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko
 **Назначение:** Desktop/web UI для управления ESP32 с прошивкой Marauder через Web Serial API
 
@@ -358,6 +358,13 @@ CSV-экспорт экранирует `=+\-@\t\r|` префиксы (OWASP), �
 
 ## Changelog
 
+### v0.7.1 (2026-06-05) — Layout & Scrolling Fixes
+
+- **DashboardView**: восстановлена оригинальная вёрстка `h-full` — скроллинг Live Output и Action Log работает внутри модулей
+- Убран rAF throttle из `onTerminalScroll` (задерживал автоскролл)
+- Удалена надпись "🎯 Select a target" — вместо неё админ-кнопки
+- Добавлены `ADMIN_ACTIONS` (System Info, Settings, Packet Count, Signal Mon, Ch Analyzer, Reboot)
+
 ### v0.7.0 (2026-06-05) — Full Audit & Bugfix
 
 **CRITICAL Fixes:**
@@ -412,4 +419,4 @@ MIT License. Подробнее см. [LICENSE](LICENSE).
 
 ---
 
-*Документация обновлена 5 июня 2026, версия 0.7.0*
+*Документация обновлена 5 июня 2026, версия 0.7.1*
