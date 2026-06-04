@@ -122,36 +122,35 @@
       </table>
     </div>
 
-    <ConfirmDialog :show="confirmDialog.show"
-      :title="confirmDialog.title"
-      :body="confirmDialog.body"
-      :cmd="confirmDialog.cmd"
-      :target="confirmDialog.target"
-      :icon="confirmDialog.icon"
-      :severity="confirmDialog.severity"
-      :confirm-label="confirmDialog.confirmLabel"
-      @confirm="onConfirm"
-      @cancel="confirmDialog.show = false" />
+    <ConfirmDialog :show="confirmState.show"
+      :title="confirmState.title"
+      :body="confirmState.body"
+      :cmd="confirmState.cmd"
+      :target="confirmState.target"
+      :icon="confirmState.icon"
+      :severity="confirmState.severity"
+      :confirm-label="confirmState.confirmLabel"
+      @confirm="onDialogConfirm"
+      @cancel="onDialogCancel" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, reactive, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useSerialStore } from '../../stores/serialStore'
 import { useApStore } from '../../stores/apStore'
 import { signalClass, fmtTimeRelative } from '../../utils/format'
-import { useToast } from '../../utils/toast'
 import { copyToClipboard } from '../../utils/clipboard'
-import { runAction, shouldConfirm } from '../../utils/actionDispatcher'
-import { getCommandMeta, SEVERITY } from '../../services/commandMeta'
-import { useContextAction } from '../../composables/useContextAction'
+import { runAction } from '../../utils/actionDispatcher'
+import { useCommandAction } from '../../composables/useCommandAction'
+import { useToast } from '../../utils/toast'
 import ConfirmDialog from '../ConfirmDialog.vue'
-import { t, tA } from '../../services/i18n'
+import { t } from '../../services/i18n'
 
 const serialStore = useSerialStore()
 const apStore = useApStore()
 const { show: toastShow } = useToast()
-const ctx = useContextAction(serialStore)
+const { confirmState, execute, onDialogConfirm, onDialogCancel } = useCommandAction()
 const search = ref('')
 const debouncedSearch = ref('')
 const sortBy = ref('rssi')
@@ -161,18 +160,6 @@ let _searchTimer = null
 watch(search, (v) => {
   if (_searchTimer) clearTimeout(_searchTimer)
   _searchTimer = setTimeout(() => { _searchTimer = null; debouncedSearch.value = v }, 200)
-})
-
-const confirmDialog = reactive({
-  show: false,
-  title: '',
-  body: '',
-  cmd: '',
-  target: '',
-  icon: '',
-  severity: SEVERITY.HIGH,
-  confirmLabel: 'Run',
-  pendingPayload: null
 })
 
 const selectedCount = computed(() => {
@@ -244,20 +231,11 @@ const filteredAPs = computed(() => {
 const toastConnect = () => toastShow(t('common.connectFirst'), 'warning')
 
 const runDispatched = async (cmd, label, target = '', opts = {}) => {
-  if (!serialStore.isDemoMode && !ctx.isConnected.value) {
-    toastShow(t('common.connectFirst'), 'warning')
-    return
-  }
-  const payload = { cmd, label, icon: opts.icon || '▶', target, options: {} }
-  if (shouldConfirm(cmd) || opts.destructive) {
-    showConfirm(payload)
-    return
-  }
-  await executeAction(payload)
+  await execute(cmd, label, opts.icon || '▶', target, opts)
 }
 
 const toggleSelect = async (ap) => {
-  if (!ctx.isConnected.value) {
+  if (!serialStore.isConnected && !serialStore.isDemoMode) {
     toastShow(t('common.connectFirst'), 'warning')
     return
   }
@@ -281,45 +259,10 @@ const toggleSelect = async (ap) => {
   }
 }
 
-const showConfirm = (payload) => {
-  const meta = getCommandMeta(payload.cmd)
-  confirmDialog.show = true
-  confirmDialog.title = t('confirm.title', { label: payload.label })
-  confirmDialog.body = meta?.destructive
-    ? tA('confirm.bodyDestructive')
-    : tA('confirm.bodyNormal')
-  confirmDialog.cmd = payload.cmd
-  confirmDialog.target = payload.target
-  confirmDialog.icon = meta?.destructive ? '⚠' : '?'
-  confirmDialog.severity = meta?.severity || SEVERITY.HIGH
-  confirmDialog.confirmLabel = payload.label
-  confirmDialog.pendingPayload = payload
-}
-
-const executeAction = async (payload) => {
-  try {
-    await runAction({ ...payload, options: { confirm: false } })
-    if (payload.cmd.startsWith('clearlist')) toastShow(t('apExplorer.cleared'), 'success')
-  } catch (e) {
-    toastShow(t('common.failed', { msg: e.message }), 'error')
-  }
-}
-
-const onConfirm = async () => {
-  const payload = confirmDialog.pendingPayload
-  confirmDialog.show = false
-  confirmDialog.pendingPayload = null
-  if (payload) await executeAction(payload)
-}
-
 const handleClear = () => {
   if (!apStore.apCount) return
-  showConfirm({
-    cmd: 'clearlist -a',
-    label: `Clear ${apStore.apCount} APs`,
-    icon: '🗑',
-    target: '',
-    options: {}
+  execute('clearlist -a', `Clear ${apStore.apCount} APs`, '🗑', '', {
+    onResult: () => toastShow(t('apExplorer.cleared'), 'success')
   })
 }
 
