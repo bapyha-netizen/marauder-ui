@@ -76,7 +76,7 @@
             <div v-if="!apStore.sortedAPs.length" class="text-center py-12 text-xs text-slate-600">
               <div class="text-2xl mb-2">📡</div>
               <div>{{ $t('dashboard.noAps') }}</div>
-              <button @click="serialStore.scanAll()" class="mt-2 text-indigo-400 hover:text-indigo-300">{{ $t('dashboard.apActions.listAps') }}</button>
+              <button @click="runAction({ cmd: 'scanall', label: 'List APs', icon: '📶' }).catch(() => {})" class="mt-2 text-indigo-400 hover:text-indigo-300">{{ $t('dashboard.apActions.listAps') }}</button>
             </div>
             <button v-for="ap in apStore.sortedAPs" :key="ap.bssid" @click="selectAP(ap)"
               :class="selectedAP?.bssid === ap.bssid ? 'bg-indigo-600/20 border-indigo-500/50' : 'bg-slate-700/20 border-transparent hover:bg-slate-700/40'"
@@ -533,7 +533,9 @@ const runActionLocal = async (action) => {
       showConfirm(result)
     }
     if (action.key === 'select' && selectedAP.value?.index !== undefined) {
-      apStore.updateAP(selectedAP.value.index, { isSelected: !selectedAP.value.isSelected })
+      if (!result.needsConfirm && result.ok !== false) {
+        apStore.updateAP(selectedAP.value.index, { isSelected: !selectedAP.value.isSelected })
+      }
     }
   } catch (e) {
     const hint = e.hint ? ' — ' + e.hint : ''

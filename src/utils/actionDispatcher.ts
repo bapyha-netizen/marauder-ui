@@ -25,7 +25,7 @@ interface RunActionParams {
   label?: string
   icon?: string
   target?: string | null
-  options?: { confirm?: boolean }
+  options?: { confirm?: boolean; signal?: AbortSignal }
 }
 
 interface PrereqState {
@@ -116,7 +116,7 @@ class ActionDispatcher {
     return String(raw)
   }
 
-  async _execute({ cmd, label, icon, target, meta }: { cmd: string; label?: string; icon?: string; target?: string | null; meta?: CommandMetaEntry }) {
+  async _execute({ cmd, label, icon, target, meta, signal }: { cmd: string; label?: string; icon?: string; target?: string | null; meta?: CommandMetaEntry; signal?: AbortSignal }) {
     const { useSerialStore } = await import('../stores/serialStore')
     const serialStore = useSerialStore()
     const metaSeverity: string = String(meta?.severity) || SEVERITY.INFO
@@ -138,12 +138,20 @@ class ActionDispatcher {
     this._setRunningAction(action)
     const startLen = serialStore.terminalOutput.length
     try {
+      if (signal?.aborted) throw Object.assign(new Error('Aborted'), { code: 'ABORTED' })
       if (meta?.category === 'scan' || meta?.category === 'sniff') {
-        await serialStore.sendCommand(cmd)
-        await new Promise(r => setTimeout(r, SCAN_OUTPUT_GRACE_MS))
+        const sent = await serialStore.sendCommand(cmd)
+        if (!sent) throw Object.assign(new Error('Failed to send command'), { code: 'SEND_FAILED' })
+        await new Promise<void>((r) => {
+          const timer = setTimeout(r, SCAN_OUTPUT_GRACE_MS)
+          signal?.addEventListener('abort', () => { clearTimeout(timer); r() }, { once: true })
+        })
       } else {
-        await serialStore.sendAndWait(cmd, COMMAND_TIMEOUT_MS)
-        await new Promise(r => setTimeout(r, COMMAND_OUTPUT_GRACE_MS))
+        await serialStore.sendAndWait(cmd, COMMAND_TIMEOUT_MS, signal)
+        await new Promise<void>((r) => {
+          const timer = setTimeout(r, COMMAND_OUTPUT_GRACE_MS)
+          signal?.addEventListener('abort', () => { clearTimeout(timer); r() }, { once: true })
+        })
       }
       const collected: string[] = []
       for (let i = startLen; i < serialStore.terminalOutput.length; i++) {
@@ -154,7 +162,10 @@ class ActionDispatcher {
       const hasError = /(?:^|\n)\s*(?:\[ERROR\]|error\b|failed\b)/i.test(output)
       action.status = hasError ? 'error' : 'ok'
       if (meta?.category === 'list' && (cmd.includes('list -a') || cmd === 'list -a')) {
-        await new Promise(r => setTimeout(r, LIST_DRAIN_MS))
+        await new Promise<void>((r) => {
+          const timer = setTimeout(r, LIST_DRAIN_MS)
+          signal?.addEventListener('abort', () => { clearTimeout(timer); r() }, { once: true })
+        })
       }
     } catch (e) {
       action.status = 'error'
@@ -251,7 +262,7 @@ export async function runAction({ cmd, label, icon, target = null, options = {} 
   if (options.confirm !== false && shouldConfirm(cmd)) {
     return { needsConfirm: true, cmd, label, icon, meta, target }
   }
-  return defaultDispatcher._execute({ cmd, label, icon, target, meta: meta ?? undefined })
+  return defaultDispatcher._execute({ cmd, label, icon, target, meta: meta ?? undefined, signal: options.signal })
 }
 
 export function isActionRunning(): boolean {

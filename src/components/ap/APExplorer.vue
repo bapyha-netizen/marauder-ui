@@ -180,6 +180,9 @@ const toggleSelectAll = () => {
       apStore.updateAP(ap.index, { isSelected: next })
     }
   }
+  if (serialStore.isConnected) {
+    runAction({ cmd: 'select -a all', label: next ? 'Select all APs' : 'Deselect all APs', icon: next ? '✅' : '⊘', options: { confirm: false } }).catch(() => {})
+  }
 }
 
 const toggleExpand = (bssid) => {

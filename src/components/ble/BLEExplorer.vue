@@ -312,7 +312,14 @@ const runSelectedSpoofAt = async () => {
 
 const handleClear = () => {
   if (bleStore.deviceCount === 0) return
-  showConfirm({ cmd: '', label: '', icon: '🗑', target: '', options: {}, __clear: true })
+  showConfirm({
+    cmd: '',
+    label: `Clear ${bleStore.deviceCount} devices`,
+    icon: '🗑',
+    target: '',
+    options: { __clear: true }
+  })
+  // Note: title/body are set by showConfirm via getCommandMeta, but we override for clarity
   confirmState.title = t('bleExplorer.clearTitle', { n: bleStore.deviceCount })
   confirmState.body = tA('bleExplorer.clearBody')
 }

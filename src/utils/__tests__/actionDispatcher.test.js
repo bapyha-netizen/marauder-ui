@@ -87,7 +87,7 @@ describe('actionDispatcher - runAction (execute path)', () => {
   it('calls sendAndWait for non-scan/sniff commands', async () => {
     await runAction({ cmd: 'list -a', label: 'List APs' })
     expect(mockSerialSendCommand).not.toHaveBeenCalled()
-    expect(mockSerialSendAndWait).toHaveBeenCalledWith('list -a', 3000)
+    expect(mockSerialSendAndWait).toHaveBeenCalledWith('list -a', 3000, undefined)
   })
 
   it('calls sendCommand for scan commands', async () => {
@@ -151,7 +151,7 @@ describe('actionDispatcher - runAction (execute path)', () => {
 
   it('skips confirm when options.confirm is false', async () => {
     await runAction({ cmd: 'reboot', label: 'Reboot', options: { confirm: false } })
-    expect(mockSerialSendAndWait).toHaveBeenCalledWith('reboot', 3000)
+    expect(mockSerialSendAndWait).toHaveBeenCalledWith('reboot', 3000, undefined)
   })
 
   it('throws when cmd is empty', async () => {

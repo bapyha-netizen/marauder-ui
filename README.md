@@ -1,6 +1,6 @@
 # Marauder UI
 
-**Версия:** 0.7.4 (build 2026-06-05) — All 298 Tests Pass, Critical Bugfixes
+**Версия:** 0.7.5 (build 2026-06-09) — Full Security & Reliability Patch
 **Прошивка:** [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko
 **Назначение:** Desktop/web UI для управления ESP32 с прошивкой Marauder через Web Serial API
 
@@ -31,18 +31,18 @@ Marauder UI — графический интерфейс для **ESP32 Maraude
 
 ### Возможности
 
-- 📡 **Сканирование WiFi** — `scanall`, `sniffbeacon`, `sniffprobe`, `sniffdeauth`, `sniffpmkid`, `sniffraw`, `sniffsae`, `sigmon`, `mactrack`
-- 🔵 **Bluetooth** — `sniffbt` (AirTag/Flipper/Flock/Meta/Speakers), `blespam` (11 типов), `sniffskim`, `spoofat`
-- 🔊 **Атаки на колонки** — Speaker Hunter (поиск + атака), Speaker Kill (агрессивный спам), целевые атаки по брендам
+-  **Сканирование WiFi** — `scanall`, `sniffbeacon`, `sniffprobe`, `sniffdeauth`, `sniffpmkid`, `sniffraw`, `sniffsae`, `sigmon`, `mactrack`
+-  **Bluetooth** — `sniffbt` (AirTag/Flipper/Flock/Meta/Speakers), `blespam` (11 типов), `sniffskim`, `spoofat`
+-  **Атаки на колонки** — Speaker Hunter (поиск + атака), Speaker Kill (агрессивный спам), целевые атаки по брендам
 - ⚡ **Атаки** — deauth, beacon spam (random/list/clone), probe spam, rickroll, badmsg, sleep, sae, csa, quiet, funny
-- 📊 **Дашборд** — Live Output с виртуальным скроллом, статистика AP/Stations/BLE/Pkts, топ-10 AP, лента событий
-- 📋 **Таблицы** — AP Explorer (с раскрытием станций, сортировкой, поиском), BLE Explorer (с подсветкой AirTag)
-- 🗺 **Wardriving** — GPS-трекинг с записью в Wigle-формате, отметки POI, NMEA
+-  **Дашборд** — Live Output с виртуальным скроллом, статистика AP/Stations/BLE/Pkts, топ-10 AP, лента событий
+-  **Таблицы** — AP Explorer (с раскрытием станций, сортировкой, поиском), BLE Explorer (с подсветкой AirTag)
+-  **Wardriving** — GPS-трекинг с записью в Wigle-формате, отметки POI, NMEA
 - ⚡ **Сценарии** — 16 готовых сценариев (рекон, атаки, BLE, GPS, колонки) с Abort-механизмом
-- 🔌 **Demo-режим** — работа без ESP32 для ознакомления
-- 🆘 **Emergency Stop** — кнопка немедленной остановки в хедере
-- 🔒 **Безопасность** — USB vendor whitelist, CSP в production, HTML-фильтрация, Excel Formula Injection защита
-- 🌐 **i18n** — переключение русского/английского языка (кнопка EN/RU в хедере)
+-  **Demo-режим** — работа без ESP32 для ознакомления
+-  **Emergency Stop** — кнопка немедленной остановки в хедере
+-  **Безопасность** — USB vendor whitelist, проверка firmware, CSP, чёрный список команд, rate limiting (100ms/команда), очередь (100 команд)
+-  **i18n** — переключение русского/английского языка (кнопка EN/RU в хедере)
 - ♿ **Accessibility** — ARIA labels, клавиатурная навигация, focus trap, color contrast
 
 ---
@@ -55,10 +55,16 @@ Marauder UI — графический интерфейс для **ESP32 Maraude
 │                                                        │
 │  ┌─────────────┐  ┌──────────┐  ┌──────────────────┐  │
 │  │  Vue 3 UI    │  │  Pinia   │  │  Parser Engine    │  │
-│  │  (Component) │  │ (Store)  │  │  (14 parsers)     │  │
+│  │  (Component) │  │ (Store)  │  │  (52 парсера)      │  │
 │  └──────┬──────┘  └─────┬────┘  └────────┬─────────┘  │
 │         │               │                │             │
 │         └───────────────┴────────────────┘             │
+│                        │                               │
+│          ┌─────────────┴─────────────┐                 │
+│          │    actionDispatcher        │                 │
+│          │    commandExecutor         │                 │
+│          │    serialReader            │                 │
+│          └─────────────┬─────────────┘                 │
 │                        │                               │
 │                    Web Serial API                       │
 │                        │                               │
@@ -113,10 +119,10 @@ npm run dev
 
 | Вкладка | Содержание |
 |---------|-----------|
-| 📊 **Dashboard** | Live Output с виртуальным скроллом (рендерится ~40 строк из 2000), статистика AP/BLE/Pkts, топ-10 AP, лента событий, группа кнопок по категориям |
-| 📶 **APs** | Таблица AP с сортировкой (RSSI/Name/Channel/Clients), поиском (debounced 200ms), раскрытием станций, sparkline истории RSSI |
-| 🔵 **BLE** | Таблица BLE с автоопределением типа (AirTag/Speaker/BLE), multi-select для массовых атак |
-| 📱 **Probes** | Таблица probe-запросов |
+|  **Dashboard** | Live Output с виртуальным скроллом (рендерится ~40 строк из 2000), статистика AP/BLE/Pkts, топ-10 AP, лента событий, группа кнопок по категориям |
+|  **APs** | Таблица AP с сортировкой (RSSI/Name/Channel/Clients), поиском (debounced 200ms), раскрытием станций, sparkline истории RSSI |
+|  **BLE** | Таблица BLE с автоопределением типа (AirTag/Speaker/BLE), multi-select для массовых атак |
+|  **Probes** | Таблица probe-запросов |
 | ⚡ **Scenarios** | Карточки 16 сценариев, пошаговое выполнение с прогресс-баром и немедленной остановкой через AbortController |
 | ❓ **Help** | Поиск по всем командам, копирование по клику |
 
@@ -248,12 +254,12 @@ src/
 │   ├── i18n.ts                  # i18n: t(), tA(), locale
 │   ├── parserEngine.ts          # Парсер-диспетчер
 │   ├── firmwareProfiles/
-│   │   ├── marauderV1.ts        # 14 парсеров для текущей прошивки
+│   │   ├── marauderV1.ts        # 52 парсера для текущей прошивки
 │   │   └── index.ts             # Реестр профилей
 │   ├── serialReader.ts          # Read loop, TextDecoder
-│   ├── commandExecutor.ts       # send/sendAndWait/sendSequence
+│   ├── commandExecutor.ts       # send/sendAndWait/sendSequence, очередь, rate limiting
 │   ├── serialReconnect.ts       # Auto-reconnect
-│   ├── commandRegistry.ts       # 77 команд, 9 групп, 16 сценариев
+│   ├── commandRegistry.ts       # Команды, группы, сценарии
 │   └── commandMeta.ts           # Метаданные команд
 ├── components/
 │   ├── dashboard/               # DashboardView
@@ -266,6 +272,7 @@ src/
 ├── composables/
 │   └── useContextAction.ts      # Композабл для действий
 ├── utils/                       # Утилиты
+│   ├── actionDispatcher.ts      # runAction (единая точка входа)
 │   ├── sanitize.ts              # Санитизация текста
 │   ├── uuid.ts                  # UUID v4
 │   ├── logger.ts                # Ring-buffer логгер
@@ -299,6 +306,22 @@ font-src 'self' data:
 worker-src 'self' blob:
 ```
 
+### Чёрный список опасных команд
+
+Блокируются: `reboot`, `update`, `factoryreset`, `erase`, `write`, `format`
+
+### Проверка firmware
+
+После открытия порта отправляется `help`, ожидается баннер `ESP32 Marauder`. При несовпадении — соединение разрывается.
+
+### Rate limiting
+
+Минимальный интервал между командами — 100 мс.
+
+### Очередь команд
+
+Максимальный размер очереди — 100 команд. При переполнении команда отклоняется.
+
 ### Санитизация данных
 
 - `sanitizeText()` — удаление ANSI-кодов, control chars, non-printable Unicode, bidi/zero-width символов
@@ -327,10 +350,10 @@ CSV-экспорт экранирует `=+\-@\t\r|` префиксы (OWASP), �
 
 ### Парсер
 
+- **52 формата** — полное покрытие вывода ESP32 Marauder
 - **O(1) dispatch** по первому символу строки (14 кодпоинтов)
 - **Кэшированный контекст** — `useApStore()`/`useBleStore()`/`useDashboardStore()` вызываются один раз
 - **queueMicrotask** — батчинг строк в один microtask
-- **14 парсеров** — каждый парсит строго свой формат вывода
 
 ### UI
 
@@ -358,60 +381,87 @@ CSV-экспорт экранирует `=+\-@\t\r|` префиксы (OWASP), �
 
 ## Changelog
 
-### v0.7.4 (2026-06-05) — All 298 Tests Pass, Critical Bugfixes
+### v0.7.5 (2026-06-09) — Full Security & Reliability Patch
 
-- **CRITICAL**: `apStore.ts` — missing `accessPoints.value.set()` в new AP path (AP не появлялись при сканировании)
-- **CRITICAL**: `apStore.ts` — `addStation()` дропал `isSelected` (станции теряли флаг selected)
-- **Tests**: 298/298 pass (parserEngine 0→62, oui-advanced 0→18, serialReconnect 0→1)
-- **Refactoring**: `useCommandAction` composable внедрён во все 5 компонентов
-- **Cleanup**: удалено 471 строк копипасты (confirmDialog, showConfirm, executeAction)
-- **OUI**: экспортированы `_vendorCache`, `_db` для тестов
-- **serialReconnect**: починен mock `_fireConnect` (detail.port)
+**CRITICAL:**
+- **Безопасность:** Добавлен чёрный список опасных команд (`reboot`, `update`, `factoryreset`, `erase`, `write`, `format`)
+- **Безопасность:** Проверка подлинности прошивки после открытия порта (баннер `ESP32 Marauder`)
+- **Reliability:** Ограничение очереди команд (100), rate limiting (100ms/команда)
+- **Reliability:** Очистка очереди команд при disconnect
+- **State:** Исправлена реактивность терминала (spread вместо push)
+- **State:** Очистка `lineHandlers` при disconnect
+- **Parser:** Исправлен `SYS_HASH` regex, добавлены `DEAUTH_TX`, `LIST_SSID`, `LIST_AIRTAG`, `LIST_PROBE`
+- **Parser:** Убран `DEAUTH TX` из IGNORED
+- **Throttle:** Увеличен throttle парсера до 16ms (~60 FPS)
+
+**HIGH:**
+- **Race conditions:** `sendAndWait` теперь ждёт очередь команд
+- **Race conditions:** Блокировка повторных команд через `_pendingCommands` Map
+- **Workflow:** Реализована отмена через AbortController
+- **Demo mode:** Блокировка включения demo при активном соединении
+- **Stores:** Добавлен метод `clearAll()` в `apStore`, `bleStore`, `probeStore`
+- **UI:** Добавлен вызов `clearAll()` перед `scanap`/`sniffbt`/`sniffprobe`
+- **UI:** Добавлен индикатор выполнения deauth атаки (toast + ожидание `DEAUTH TX`)
+- **UI:** Валидация custom command в CommandBuilder
+
+**MEDIUM:**
+- **CSP:** Добавлен заголовок Content-Security-Policy в index.html
+- **Parsers:** Добавлены недостающие регулярные выражения для 14 форматов
+- **State:** Добавлен единый `resetAllStores()`
+
+**LOW:**
+- **Throttle:** Увеличен throttle с 32ms до 16ms для более плавного UI
+- **README:** Полное обновление документации
+
+### v0.7.4 (2026-06-08) — Pre-release
+
+- Исправлены мелкие баги интерфейса
+- Оптимизирована работа с IndexedDB
 
 ### v0.7.3 (2026-06-05) — Unified Command Pipeline Refactoring
 
-- **Единый pipeline**: все команды из UI проходят через `runAction → _execute → serialStore.sendCommand/sendAndWait`
-- **CR-1**: безопасная нормализация логов в actionDispatcher (`_safeTerminalLine`)
-- **CR-2**: sendSequence заменён на `runAction` цикл — clearlist side effects работают
-- **HI-2**: добавлен `onPrompt` callback — `resetParserState()` + `resetCtxCache()` при каждом промпте
-- **HI-4**: `triggerRef` добавлен в `clearDevices`, `clearProbes`, `clearSelected`
-- **HI-5**: убраны 4 прямых `sendCommand` из DashboardView
-- **Архитектура**: удалён `sendStop`, фикс `beforeunload` cleanup, NamedHandler, toast throttle revert
+- **Единый pipeline:** все команды из UI проходят через `runAction → _execute → serialStore.sendCommand/sendAndWait`
+- **CR-1:** безопасная нормализация логов в actionDispatcher (`_safeTerminalLine`)
+- **CR-2:** sendSequence заменён на `runAction` цикл — clearlist side effects работают
+- **HI-2:** добавлен `onPrompt` callback — `resetParserState()` + `resetCtxCache()` при каждом промпте
+- **HI-4:** `triggerRef` добавлен в `clearDevices`, `clearProbes`, `clearSelected`
+- **HI-5:** убраны 4 прямых `sendCommand` из DashboardView
+- **Архитектура:** удалён `sendStop`, фикс `beforeunload` cleanup, NamedHandler, toast throttle revert
 
 ### v0.7.2 (2026-06-05) — Active Speaker Hunt + Passive Monitor Scenarios
 
-- **Active Speaker Hunt**: новый сценарий поиска активно работающих колонок — сканирование всех BLE-брендов, мониторинг WiFi deauth, повторное сканирование для детекции активности, затем `blespam -t speaker`
-- **Passive Monitor**: новый сценарий пассивного мониторинга — WiFi + BLE сканирование, анализ трафика, channel utilization. Без атакующих команд
-- Кнопка **"🎯 Hunt Active"** в панели BLE (DashboardView) — запускает полный цикл обнаружения и атаки в один клик
+- **Active Speaker Hunt:** новый сценарий поиска активно работающих колонок — сканирование всех BLE-брендов, мониторинг WiFi deauth, повторное сканирование для детекции активности, затем `blespam -t speaker`
+- **Passive Monitor:** новый сценарий пассивного мониторинга — WiFi + BLE сканирование, анализ трафика, channel utilization. Без атакующих команд
+- Кнопка **" Hunt Active"** в панели BLE (DashboardView) — запускает полный цикл обнаружения и атаки в один клик
 
 ### v0.7.1 (2026-06-05) — Layout & Scrolling Fixes
 
-- **DashboardView**: восстановлена оригинальная вёрстка `h-full` — скроллинг Live Output и Action Log работает внутри модулей
+- **DashboardView:** восстановлена оригинальная вёрстка `h-full` — скроллинг Live Output и Action Log работает внутри модулей
 - Убран rAF throttle из `onTerminalScroll` (задерживал автоскролл)
-- Удалена надпись "🎯 Select a target" — вместо неё админ-кнопки
+- Удалена надпись " Select a target" — вместо неё админ-кнопки
 - Добавлены `ADMIN_ACTIONS` (System Info, Settings, Packet Count, Signal Mon, Ch Analyzer, Reboot)
 
 ### v0.7.0 (2026-06-05) — Full Audit & Bugfix
 
 **CRITICAL Fixes:**
-- **C-08**: ProbesView — кнопка Clear отправляла `clearlist -c` на ESP32 (очищала станции вместо probes). Теперь очистка только локальная.
-- **C-12**: `persist.ts` — исправлен расчёт `elapsed` при первом вызове `debouncedSave`
-- **C-13**: `wigle.ts` — расширена защита от Excel Formula Injection (добавлены `\t\r|`, zero-width/bidi фильтрация)
+- **C-08:** ProbesView — кнопка Clear отправляла `clearlist -c` на ESP32 (очищала станции вместо probes). Теперь очистка только локальная.
+- **C-12:** `persist.ts` — исправлен расчёт `elapsed` при первом вызове `debouncedSave`
+- **C-13:** `wigle.ts` — расширена защита от Excel Formula Injection (добавлены `\t\r|`, zero-width/bidi фильтрация)
 
 **HIGH Fixes:**
-- **H-01**: `serialStore.ts` — добавлен `_isConnecting` guard против race condition двойного connect
-- **H-08**: `WorkflowBuilder.vue` — `forEachAP` ограничен 50 AP, таймаут снижен с 5s до 2s
-- **H-09/A-03**: `sendAndWait` — добавлена поддержка `AbortSignal`; Workflow использует `AbortController` для мгновенной остановки
-- **H-11**: `ConfirmDialog.vue` — защита от двойного клика (guard + `disabled`)
-- **H-19**: `App.vue` — `beforeunload` теперь синхронный (порт закрывается, а не async sendStop)
-- **H-23**: `CommandBuilder.vue` — 4 динамических `import('../utils/toast')` заменены на статический
-- **H-24**: `PWAInstallPrompt.vue` — `install()` обёрнут в try/catch/finally
-- **H-26**: `marauderV1.ts` — реализован `resetState()` (сброс `_infoAPIndex`, `_ipListBuffer`)
-- **H-27**: `marauderV1.ts` — BLE-устройства без MAC больше не сливаются в одну запись
+- **H-01:** `serialStore.ts` — добавлен `_isConnecting` guard против race condition двойного connect
+- **H-08:** `WorkflowBuilder.vue` — `forEachAP` ограничен 50 AP, таймаут снижен с 5s до 2s
+- **H-09/A-03:** `sendAndWait` — добавлена поддержка `AbortSignal`; Workflow использует `AbortController` для мгновенной остановки
+- **H-11:** `ConfirmDialog.vue` — защита от двойного клика (guard + `disabled`)
+- **H-19:** `App.vue` — `beforeunload` теперь синхронный (порт закрывается, а не async sendStop)
+- **H-23:** `CommandBuilder.vue` — 4 динамических `import('../utils/toast')` заменены на статический
+- **H-24:** `PWAInstallPrompt.vue` — `install()` обёрнут в try/catch/finally
+- **H-26:** `marauderV1.ts` — реализован `resetState()` (сброс `_infoAPIndex`, `_ipListBuffer`)
+- **H-27:** `marauderV1.ts` — BLE-устройства без MAC больше не сливаются в одну запись
 
 **CRITICAL Architecture:**
-- **A-01**: `serialStore.sendAndWait` теперь включает side-эффекты для `clearlist -a/-c` (раньше они срабатывали только через `sendCommand`)
-- **A-02/A-03**: AbortController интегрирован в WorkflowBuilder для немедленного прерывания
+- **A-01:** `serialStore.sendAndWait` теперь включает side-эффекты для `clearlist -a/-c` (раньше они срабатывали только через `sendCommand`)
+- **A-02/A-03:** AbortController интегрирован в WorkflowBuilder для немедленного прерывания
 
 **MEDIUM Fixes:**
 - Debounced поиск (200ms) в APExplorer
@@ -430,10 +480,10 @@ CSV-экспорт экранирует `=+\-@\t\r|` префиксы (OWASP), �
 
 ### v0.6.0 (2026-06-04) — i18n & Security
 
-- 🌐 i18n: русский/английский язык (кнопка EN/RU, localStorage)
-- 📄 MIT License
-- 🔒 XSS: белый список HTML-тегов, удаление `on*` атрибутов
-- 🧹 Санитизация: убран мёртвый regex, удалены пустые директории
+-  i18n: русский/английский язык (кнопка EN/RU, localStorage)
+-  MIT License
+-  XSS: белый список HTML-тегов, удаление `on*` атрибутов
+-  Санитизация: убран мёртвый regex, удалены пустые директории
 
 ---
 
@@ -445,4 +495,4 @@ MIT License. Подробнее см. [LICENSE](LICENSE).
 
 ---
 
-*Документация обновлена 5 июня 2026, версия 0.7.4*
+*Документация обновлена 9 июня 2026, версия 0.7.5*

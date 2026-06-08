@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { shallowRef, triggerRef, computed, watch, ref } from 'vue'
 import { debouncedSave, loadStore, clearPersistedStore } from '../utils/persist'
+import { sanitizeText } from '../utils/sanitize'
 import type { AccessPoint, Station } from '../types'
 
 const PERSIST_KEY = 'accessPoints'
@@ -252,6 +253,10 @@ export const useApStore = defineStore('ap', () => {
   }
 
   function updateOrAddAP(ap: Partial<APOpaque>) {
+    if (ap.essid) ap.essid = sanitizeText(ap.essid, { maxLength: 64, html: true })
+    if (ap.bssid) ap.bssid = sanitizeText(ap.bssid, { maxLength: 18, html: true })
+    if (ap.vendor) ap.vendor = sanitizeText(ap.vendor, { maxLength: 64, html: true })
+    if (ap.encryption) ap.encryption = sanitizeText(ap.encryption, { maxLength: 16, html: true })
     const existingKey = _findExisting(ap)
     const existing = existingKey ? accessPoints.value.get(existingKey) : null
     const newKey = ap.bssid ? ap.bssid.toUpperCase()
@@ -277,8 +282,8 @@ export const useApStore = defineStore('ap', () => {
         vendor: ap.vendor || existing.vendor || '',
         frameCount: (existing.frameCount || 0) + (ap.frameCount || 0)
       }
-      if (existing.rssi != null) {
-        const newHistory = [...existing.rssiHistory, existing.rssi]
+      if (ap.rssi != null) {
+        const newHistory = [...(existing.rssiHistory || []), ap.rssi]
         if (newHistory.length > 20) newHistory.shift()
         merged.rssiHistory = newHistory
       }
@@ -300,7 +305,7 @@ export const useApStore = defineStore('ap', () => {
       stations: existing?.stations || [],
       vendor: ap.vendor || existing?.vendor || '',
       frameCount: (existing?.frameCount || 0) + (ap.frameCount || 0),
-      rssiHistory: existing?.rssiHistory ? [...existing.rssiHistory] : []
+      rssiHistory: ap.rssi != null ? [ap.rssi] : (existing?.rssiHistory ? [...existing.rssiHistory] : [])
     }
     _updateIndexesForKey(newKey, newAP)
     accessPoints.value.set(newKey, newAP)

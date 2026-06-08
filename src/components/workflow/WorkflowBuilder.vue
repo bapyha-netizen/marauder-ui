@@ -137,12 +137,13 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useSerialStore } from '../../stores/serialStore'
 import { useApStore } from '../../stores/apStore'
 import { useBleStore } from '../../stores/bleStore'
 import { useDashboardStore } from '../../stores/dashboardStore'
 import { WORKFLOWS } from '../../services/commandRegistry'
+import { runAction } from '../../utils/actionDispatcher'
 import { t, locale } from '../../services/i18n'
 
 const emit = defineEmits(['navigate'])
@@ -167,6 +168,14 @@ const cachedResults = ref(null)
 const durationTick = ref(0)
 let _durationInterval = null
 let _abortController = null
+
+onBeforeUnmount(() => {
+  if (_abortController) { _abortController.abort(); _abortController = null }
+  if (_durationInterval) { clearInterval(_durationInterval); _durationInterval = null }
+  isRunning.value = false
+  aborted.value = true
+  selectedWorkflow.value = null
+})
 
 const addLog = (msg, icon = '•', color = 'text-slate-400') => {
   const t = new Date()
@@ -253,7 +262,7 @@ const closeWorkflow = () => {
   cachedResults.value = null
   if (_durationInterval) { clearInterval(_durationInterval); _durationInterval = null }
   if (serialStore.isConnected) {
-    serialStore.sendCommand('stopscan')
+    runAction({ cmd: 'stopscan', label: 'Stop (workflow)', icon: '⏹' }).catch(() => {})
   }
 }
 
@@ -432,7 +441,7 @@ const executeWorkflow = async () => {
 
   if (!hasStopManual) {
     try {
-      await serialStore.sendAndWait('stopscan', 5000, signal)
+      await runAction({ cmd: 'stopscan', label: 'Cleanup stop', icon: '⏹', options: { signal } })
       addLog(t('workflows.sent', { cmd: 'stopscan (cleanup)' }), '⏹', 'text-slate-400')
     } catch (_) { }
   } else {

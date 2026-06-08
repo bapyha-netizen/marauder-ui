@@ -99,7 +99,7 @@ import { useDashboardStore } from '../stores/dashboardStore'
 import { useApStore } from '../stores/apStore'
 import { useBleStore } from '../stores/bleStore'
 import { COMMAND_GROUPS } from '../services/commandRegistry'
-import { getCommandMeta, SEVERITY_META } from '../services/commandMeta'
+import { getCommandMeta, SEVERITY_META, SEVERITY } from '../services/commandMeta'
 import { runAction, getPrereqState, shouldConfirm } from '../utils/actionDispatcher'
 import { sanitizeText } from '../utils/sanitize'
 import { useCommandAction } from '../composables/useCommandAction'
@@ -160,9 +160,9 @@ function cmdState(cmd) {
   cmdStateCache.set(cacheKey, state)
   return state
 }
-watch([() => serialStore.isConnected, () => apStore.sortedAPs, () => bleStore.sortedDevices], () => {
+watch(() => serialStore.isConnected, () => {
   cmdStateCache.clear()
-}, { deep: true })
+})
 
 const resolveCommand = (cmd) => {
   return new Promise((resolve) => {

@@ -130,8 +130,12 @@ const onDialogConfirmCustom = async () => {
 
 const handleClear = () => {
   if (probeStore.probeCount === 0) return
-  showConfirm({ cmd: '', label: '', icon: '🗑', target: '', options: {}, __clear: true })
-  confirmState.title = t('confirm.title', { label: `Clear ${probeStore.probeCount} probes` })
-  confirmState.body = tA('confirm.bodyNormal')
+  showConfirm({
+    cmd: '',
+    label: `Clear ${probeStore.probeCount} probes`,
+    icon: '🗑',
+    target: '',
+    options: { __clear: true }
+  })
 }
 </script>

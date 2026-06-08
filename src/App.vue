@@ -145,6 +145,7 @@ import { parseLine, parseDemoAP, parseDemoBLE, startParser, stopParser } from '.
 import { runAction } from './utils/actionDispatcher'
 import { useToast } from './utils/toast'
 import { sanitizeText } from './utils/sanitize'
+import { logger } from './utils/logger'
 import { locale, toggleLocale, t } from './services/i18n'
 
 const serialStore = useSerialStore()
@@ -219,10 +220,45 @@ const checkMobileDebounced = () => {
   _resizeTimer = setTimeout(() => { _resizeTimer = null; checkMobile() }, 200)
 }
 
+// Terminal output throttling to prevent UI freezing during intensive operations
+let _terminalThrottleTimer = null
+const processTerminalOutput = () => {
+  if (_terminalThrottleTimer) return
+  
+  _terminalThrottleTimer = setTimeout(() => {
+    const lines = serialStore.terminalOutput
+    if (!lines || lines.length <= lastLength) {
+      _terminalThrottleTimer = null
+      return
+    }
+    
+    for (let i = lastLength; i < lines.length; i++) {
+      try {
+        const raw = typeof lines[i] === 'string' ? lines[i] : lines[i].text || ''
+        if (raw) parseLine(sanitizeText(raw, { html: true }))
+      } catch (e) {
+        console.error('Parse error:', e)
+      }
+    }
+    lastLength = lines.length
+    _terminalThrottleTimer = null
+  }, 32) // ~30 FPS limit for terminal processing
+}
+
+const _onUnhandledRejection = (event) => {
+  const msg = event.reason?.message || String(event.reason)
+  if (msg.includes('serial') || msg.includes('Serial') || msg.includes('port') || msg.includes('Port')) {
+    event.preventDefault()
+    serialStore.addToTerminal(`Unhandled serial error: ${msg}`, 'error')
+    logger.warn('Unhandled serial rejection', msg, 'serial')
+  }
+}
+
 onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobileDebounced)
   window.addEventListener('beforeunload', _onBeforeUnload)
+  window.addEventListener('unhandledrejection', _onUnhandledRejection)
   try {
     await Promise.all([
       apStore.hydrate(),
@@ -247,7 +283,12 @@ onUnmounted(() => {
   dashStore.stopTick()
   window.removeEventListener('resize', checkMobileDebounced)
   window.removeEventListener('beforeunload', _onBeforeUnload)
+  window.removeEventListener('unhandledrejection', _onUnhandledRejection)
   _stopDemoInterval()
+  if (_terminalThrottleTimer) {
+    clearTimeout(_terminalThrottleTimer)
+    _terminalThrottleTimer = null
+  }
 })
 
 watch(() => serialStore.isConnected, (connected) => {
@@ -256,19 +297,11 @@ watch(() => serialStore.isConnected, (connected) => {
 })
 
 watch(() => serialStore.terminalOutput.length, (newLen, oldLen) => {
-  if (newLen < oldLen) { lastLength = Math.max(0, lastLength - (oldLen - newLen)); return }
-  const lines = serialStore.terminalOutput
-  if (lines.length > lastLength) {
-    for (let i = lastLength; i < lines.length; i++) {
-      try {
-        const raw = typeof lines[i] === 'string' ? lines[i] : lines[i].text || ''
-        parseLine(sanitizeText(raw, { html: true }))
-      } catch (e) {
-        console.error('Parse error:', e)
-      }
-    }
-    lastLength = lines.length
+  if (newLen < oldLen) { 
+    lastLength = Math.max(0, lastLength - (oldLen - newLen))
+    return 
   }
+  processTerminalOutput()
 })
 
 const handleConnect = async () => {

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { shallowRef, triggerRef, computed, watch } from 'vue'
 import { debouncedSave, loadStore, clearPersistedStore } from '../utils/persist'
+import { sanitizeText } from '../utils/sanitize'
 
 const PERSIST_KEY = 'probes'
 
@@ -23,7 +24,8 @@ export const useProbeStore = defineStore('probe', () => {
   })
 
   function addProbe(rssi: number, ch: number, clientMac: string, ssid: string) {
-    // Newest-first prepend. Capped at 500 entries to bound memory + IndexedDB write size.
+    clientMac = sanitizeText(clientMac, { maxLength: 18, html: true })
+    ssid = sanitizeText(ssid, { maxLength: 64, html: true })
     const next = [{ rssi, ch, clientMac: clientMac.toUpperCase(), ssid, time: new Date() }, ...probes.value]
     if (next.length > 500) next.length = 500
     probes.value = next

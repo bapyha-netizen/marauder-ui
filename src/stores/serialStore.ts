@@ -196,13 +196,13 @@ export const useSerialStore = defineStore('serial', () => {
     getReconnect().cancel()
     getReconnect().uninstallListeners()
     await reader.stop()
+    isConnected.value = false
     if (port.value) {
       try { await port.value.close() } catch (e) {
         logger.warn('port.close during disconnect', (e as Error)?.message, 'serial')
       }
       port.value = null
     }
-    isConnected.value = false
     stopParser()
     resetParserState()
     resetCtxCache()
@@ -260,10 +260,13 @@ export const useSerialStore = defineStore('serial', () => {
     addToTerminal: addToTerminal as (text: string, type?: string) => void
   })
 
-  const scanAll = async (): Promise<void> => {
+  const scanAll = async (signal?: AbortSignal): Promise<void> => {
     if (isDemoMode.value) {
       addToTerminal('> scanall (demo)', 'command')
-      await new Promise<void>(r => setTimeout(r, 1500))
+      await new Promise<void>((r) => {
+        const timer = setTimeout(r, 1500)
+        signal?.addEventListener('abort', () => { clearTimeout(timer); r() }, { once: true })
+      })
       parseDemoAP()
       parseDemoBLE()
       addToTerminal('> stopscan (demo)', 'command')
@@ -275,16 +278,19 @@ export const useSerialStore = defineStore('serial', () => {
       'stopscan',
       { delay: 500 },
       'list -a'
-    ])
+    ], signal)
   }
 
-  const clearListAndScan = async (): Promise<void> => {
+  const clearListAndScan = async (signal?: AbortSignal): Promise<void> => {
     const ok = await executor.send('clearlist -a')
     if (!ok) {
       addToTerminal('Clear list failed: device did not acknowledge', 'error')
     }
-    await new Promise<void>(r => setTimeout(r, 500))
-    await scanAll()
+    await new Promise<void>((r) => {
+      const timer = setTimeout(r, 500)
+      signal?.addEventListener('abort', () => { clearTimeout(timer); r() }, { once: true })
+    })
+    await scanAll(signal)
   }
 
   const clearOutput = (): void => {
@@ -307,7 +313,7 @@ export const useSerialStore = defineStore('serial', () => {
 
   const _sendAndWaitWithSideEffects = async (command: string, timeout?: number, signal?: AbortSignal): Promise<void> => {
     if (signal?.aborted) return
-    await executor.sendAndWait(command, timeout)
+    await executor.sendAndWait(command, timeout, signal)
     if (command === 'clearlist -a') apStore.clearAPs()
     else if (command === 'clearlist -c') apStore.clearSelected()
   }
@@ -319,7 +325,6 @@ export const useSerialStore = defineStore('serial', () => {
     sendCommand: _sendWithSideEffects,
     sendAndWait: _sendAndWaitWithSideEffects,
     sendSequence: executor.sendSequence,
-    scanAll, clearListAndScan,
     addToTerminal, clearOutput, toggleDemo, onLine, setTerminalOutput,
     cancelReconnect: () => getReconnect().cancel(),
     scheduleReconnect: () => getReconnect().schedule()

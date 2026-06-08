@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { shallowRef, triggerRef, computed, watch, ref } from 'vue'
 import { debouncedSave, loadStore, clearPersistedStore } from '../utils/persist'
+import { sanitizeText } from '../utils/sanitize'
 import type { BLEDevice } from '../types'
 
 const PERSIST_KEY = 'bleDevices'
@@ -15,7 +16,6 @@ interface BLEDeviceRecord extends BLEDevice {
 export const useBleStore = defineStore('ble', () => {
   const devices = shallowRef<Map<string, BLEDeviceRecord>>(new Map())
   const MAX_BLE_DEVICES = 2000
-  let _evictionCounter = 0
 
   const sortedDevices = computed(() => {
     void devices.value
@@ -26,16 +26,16 @@ export const useBleStore = defineStore('ble', () => {
   const deviceCount = computed(() => devices.value.size)
 
   function updateOrAddDevice(dev: Partial<BLEDeviceRecord> & { mac: string }) {
+    if (dev.mac) dev.mac = sanitizeText(dev.mac, { maxLength: 18, html: true })
+    if (dev.name) dev.name = sanitizeText(dev.name, { maxLength: 128, html: true })
+    if (dev.manufacturer) dev.manufacturer = sanitizeText(dev.manufacturer, { maxLength: 64, html: true })
     const now = new Date()
     const map = devices.value
     if (!map.has(dev.mac) && map.size >= MAX_BLE_DEVICES) {
-      if (++_evictionCounter % 100 === 0) {
-        const sorted = Array.from(map.entries())
-          .sort((a, b) => a[1].lastSeen.getTime() - b[1].lastSeen.getTime())
-        for (let i = 0; i < 100 && i < sorted.length; i++) {
-          map.delete(sorted[i][0])
-        }
-      }
+      // Evict 1 oldest device per insertion instead of batch eviction every 100
+      const oldest = Array.from(map.entries())
+        .sort((a, b) => a[1].lastSeen.getTime() - b[1].lastSeen.getTime())[0]
+      if (oldest) map.delete(oldest[0])
     }
     const existing = map.get(dev.mac)
     const nowMs = Date.now()
@@ -57,7 +57,6 @@ export const useBleStore = defineStore('ble', () => {
 
   function clearDevices() {
     devices.value = new Map()
-    _evictionCounter = 0
     triggerRef(devices)
     clearPersistedStore(PERSIST_KEY)
   }

@@ -45,12 +45,12 @@ export function createReconnectManager(deps: ReconnectDeps) {
       if (!deps.autoReconnect.value) return
       const newPort = port
       const newInfo = newPort.getInfo?.() || {}
+      cancel()
+      deps.reconnectAttempts.value = 0
       if (deps.lastConnectedPortInfo.value
         && newInfo.usbVendorId === deps.lastConnectedPortInfo.value.usbVendorId
         && newInfo.usbProductId === deps.lastConnectedPortInfo.value.usbProductId) {
         deps.addToTerminal('Device plugged in — waiting for firmware to boot...', 'system')
-        cancel()
-        deps.reconnectAttempts.value = 0
         // Clear any existing connection wait timer to prevent duplicates
         if (_connectWaitTimer) {
           clearTimeout(_connectWaitTimer)

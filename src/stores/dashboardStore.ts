@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, shallowRef, triggerRef, computed } from 'vue'
+import { sanitizeText } from '../utils/sanitize'
 import type { DashboardEvent, PacketCounts, ChannelUtilization, IPListEntry } from '../types'
 
 export const useDashboardStore = defineStore('dashboard', () => {
@@ -42,13 +43,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   function addEvent(type: string, data: string) {
-    // Newest-first prepend. Capped at 200 entries to bound memory + IndexedDB write size.
-    //
-    // U-07: events are not yet surfaced in the UI. They are kept in the store
-    // so that future panels (e.g. a "Recent activity" feed in the dashboard
-    // or a debug overlay) can render them without plumbing changes. The
-    // `events` ref is already reactive; subscribe to it from a component to
-    // display.
+    data = sanitizeText(data, { maxLength: 512, html: true })
     const next = [{ type, data, time: new Date() }, ...events.value]
     if (next.length > 200) next.length = 200
     events.value = next
@@ -73,12 +68,16 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   function setIPList(list: IPListEntry[]) {
-    ipList.value = list
+    ipList.value = list.map((entry) => ({
+      ...entry,
+      ip: sanitizeText(entry.ip, { maxLength: 40, html: true }),
+      mac: sanitizeText(entry.mac, { maxLength: 18, html: true })
+    }))
   }
 
   function setLastStationAP(index: number, name: string) {
     lastStationAPIndex.value = index
-    lastStationAPName.value = name
+    lastStationAPName.value = sanitizeText(name, { maxLength: 64, html: true })
   }
 
   function resetStats() {
