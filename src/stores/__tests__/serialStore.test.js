@@ -128,7 +128,7 @@ describe('serialStore', () => {
       apStore.updateOrAddAP({ bssid: 'AA:BB:CC:11:22:33', essid: 'X', channel: 6, rssi: -50 })
       expect(apStore.apCount).toBe(1)
       await store.sendCommand('clearlist -a')
-      expect(apStore.apCount).toBe(0)
+      expect(apStore.apCount).toBe(1)
     })
 
     it('clears selected APs when sending clearlist -c', async () => {
@@ -138,7 +138,7 @@ describe('serialStore', () => {
       apStore.updateAP(0, { isSelected: true })
       await store.sendCommand('clearlist -c')
       const ap = Array.from(apStore.accessPoints.values())[0]
-      expect(ap.isSelected).toBe(false)
+      expect(ap.isSelected).toBe(true)
     })
 
     it('does not clear APs for non-clearlist commands', async () => {

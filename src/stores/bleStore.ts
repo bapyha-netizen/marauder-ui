@@ -26,9 +26,9 @@ export const useBleStore = defineStore('ble', () => {
   const deviceCount = computed(() => devices.value.size)
 
   function updateOrAddDevice(dev: Partial<BLEDeviceRecord> & { mac: string }) {
-    if (dev.mac) dev.mac = sanitizeText(dev.mac, { maxLength: 18, html: true })
-    if (dev.name) dev.name = sanitizeText(dev.name, { maxLength: 128, html: true })
-    if (dev.manufacturer) dev.manufacturer = sanitizeText(dev.manufacturer, { maxLength: 64, html: true })
+    if (dev.mac) dev.mac = sanitizeText(dev.mac, { maxLength: 18 })
+    if (dev.name) dev.name = sanitizeText(dev.name, { maxLength: 128 })
+    if (dev.manufacturer) dev.manufacturer = sanitizeText(dev.manufacturer, { maxLength: 64 })
     const now = new Date()
     const map = devices.value
     if (!map.has(dev.mac) && map.size >= MAX_BLE_DEVICES) {
@@ -99,12 +99,26 @@ export const useBleStore = defineStore('ble', () => {
       changed = true
     }
     if (changed) {
-      // Sorted devices are computed, no need to manually update
+      triggerRef(devices)
+    }
+  }
+
+  function removeOldDevices(maxAgeMs = 300000) {
+    const now = Date.now()
+    let changed = false
+    for (const [key, dev] of devices.value.entries()) {
+      if (now - new Date(dev.lastSeen).getTime() > maxAgeMs) {
+        devices.value.delete(key)
+        changed = true
+      }
+    }
+    if (changed) {
+      triggerRef(devices)
     }
   }
 
   return {
     devices, sortedDevices, deviceCount, airtagCount,
-    updateOrAddDevice, clearDevices, hydrate
+    updateOrAddDevice, clearDevices, hydrate, removeOldDevices
   }
 })

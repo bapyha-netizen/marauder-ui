@@ -1,6 +1,6 @@
 # Marauder UI
 
-**Версия:** 0.7.5 (build 2026-06-09) — Full Security & Reliability Patch
+**Версия:** 0.7.5.2 (build 2026-06-10) — Security & Reliability Patch
 **Прошивка:** [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko
 **Назначение:** Desktop/web UI для управления ESP32 с прошивкой Marauder через Web Serial API
 
@@ -325,8 +325,7 @@ worker-src 'self' blob:
 ### Санитизация данных
 
 - `sanitizeText()` — удаление ANSI-кодов, control chars, non-printable Unicode, bidi/zero-width символов
-- HTML-фильтрация по белому списку тегов (`span`, `b`, `i`, `u`, `br`)
-- Удаление `on*` атрибутов (XSS)
+- Все HTML-теги и сущности вырезаются (XSS)
 - Ограничение длины (4096 символов)
 
 ### Excel Formula Injection
@@ -360,11 +359,12 @@ CSV-экспорт экранирует `=+\-@\t\r|` префиксы (OWASP), �
 - **Виртуальный скролл терминала** — рендерится ~40 строк из 2000
 - **Debounced поиск** — 200ms debounce в таблицах AP/BLE
 - **rAF-throttle** для scroll-обработчиков
-- **shallowRef + triggerRef** — мутации Map/Set in-place без копирования
+- **shallowRef + triggerRef** — мутации Map/Set in-place без копирования; `triggerRef` вызывается после всех in-place мутаций (`removeOldAPs`, `hydrate`) для гарантии реактивности computed/watch
 
 ### Хранилище
 
 - **LRU eviction** — max 1000 AP, 2000 BLE, 500 probes
+- **TTL cleanup** — AP/BLE/probes с истекшим `lastSeen` (>5min) удаляются каждые 30s через `removeOldAPs/removeOldDevices/removeOldProbes`
 - **Debounced IndexedDB** — 1s debounce + 5s max wait + beforeunload flush
 - **Инкрементальные индексы** — `_byBssid`, `_byIndex` без полного rebuilt на каждое изменение
 
@@ -381,18 +381,41 @@ CSV-экспорт экранирует `=+\-@\t\r|` префиксы (OWASP), �
 
 ## Changelog
 
+### v0.7.5.2 (2026-06-10) — Security & Async Reliability Patch
+
+**CRITICAL:**
+- **XSS:** Удалён `html: true` режим из `sanitizeText()` — больше нет разрешённых HTML-тегов. Все display через `v-text` (DashboardView уже был исправлен).
+- **Async (R2):** `_isConnecting` — добавлен 30s таймаут сброса. Если пользователь закрыл диалог `requestPort()` без выбора, флаг больше не зависает навсегда.
+- **Async (R6):** `discHandler` в `serialReconnect` теперь вызывает `cancelPending()` и очищает `_lineHandlers` при отключении устройства — in-flight команды не зависают.
+- **Async (R10):** `cancelPendingSaves()` вызывается в `disconnect()` — предотвращает запись устаревших данных в IndexedDB после дисконнекта.
+- **Side effects (R12):** Clearlist side effects (`clearAPs`, `clearDevices`, `clearProbes`, `resetStats`) перенесены из `_sendWithSideEffects` / `_sendAndWaitWithSideEffects` в единую точку — `actionDispatcher._execute`. Удалены дублирующие обёртки в `serialStore`, удалён мёртвый код `scanAll` / `clearListAndScan`.
+
+**HIGH:**
+- **Async (R5):** `_doSendAndWait` — добавлена проверка `signal.aborted` перед вызовом `_send()`. Команда не уходит на устройство после abort.
+- **Async (R9):** `_processQueue` / `clearQueue` — добавлен флаг `_cancelling`. `cancelPending()` больше не race'ит с текущей записью в порт.
+- **Async (R14):** `_notifyLine` — каждый handler обёрнут в try/catch. Исключение в одном handler не теряет остаток батча.
+- **Async (R15):** `actionDispatcher._execute` — добавлен флаг `_executing`. Повторный вызов до завершения возвращает `{ ok: false }`.
+- **Async (R4):** `serialStore` — добавлен shared `AbortController` (`getWorkflowSignal()`). При `disconnect()` сигнал прерывает WorkflowBuilder.
+- **Async (R13):** `resetCtxCache()` вызывается после `reader.start()` в `_buildConnect` — парсерный контекст свежий после reconnect.
+- **BR-03:** Добавлен `clearAllStores()` helper в `serialStore` — атомарно очищает AP, BLE, probes и dashboard.
+- **Security:** Allowlist команд (`ALLOWED_COMMANDS`) уже был реализован в commandExecutor.ts — подтверждён и оставлен.
+- **Parser:** `parseSignalMonitor` теперь создаёт временный AP при неизвестном SSID (вместо drop).
+
 ### v0.7.5 (2026-06-09) — Full Security & Reliability Patch
 
 **CRITICAL:**
 - **Безопасность:** Добавлен чёрный список опасных команд (`reboot`, `update`, `factoryreset`, `erase`, `write`, `format`)
 - **Безопасность:** Проверка подлинности прошивки после открытия порта (баннер `ESP32 Marauder`)
 - **Reliability:** Ограничение очереди команд (100), rate limiting (100ms/команда)
-- **Reliability:** Очистка очереди команд при disconnect
+- **Reliability:** Очистка очереди и pending команд при disconnect (`cancelPending` вместо `clearQueue`) — RC-4
+- **Race condition (RC-1):** Последовательный mutex для `sendAndWait` — предотвращает перехват чужих prompt при параллельных вызовах
+- **Race condition (RC-4):** `_sendAndWaitQueue` очищается в `cancelPending()`, сброс `_sendAndWaitInProgress`
 - **State:** Исправлена реактивность терминала (spread вместо push)
 - **State:** Очистка `lineHandlers` при disconnect
 - **Parser:** Исправлен `SYS_HASH` regex, добавлены `DEAUTH_TX`, `LIST_SSID`, `LIST_AIRTAG`, `LIST_PROBE`
 - **Parser:** Убран `DEAUTH TX` из IGNORED
 - **Throttle:** Увеличен throttle парсера до 16ms (~60 FPS)
+- **Demo mode:** Защита от включения demo при активном serial-соединении (App.vue guard)
 
 **HIGH:**
 - **Race conditions:** `sendAndWait` теперь ждёт очередь команд
@@ -403,11 +426,16 @@ CSV-экспорт экранирует `=+\-@\t\r|` префиксы (OWASP), �
 - **UI:** Добавлен вызов `clearAll()` перед `scanap`/`sniffbt`/`sniffprobe`
 - **UI:** Добавлен индикатор выполнения deauth атаки (toast + ожидание `DEAUTH TX`)
 - **UI:** Валидация custom command в CommandBuilder
+- **State (BR-01):** `apStore.removeOldAPs()` — добавлены `triggerRef(accessPoints)` и `_recomputeStats()`. Ранее после удаления старых AP computed-свойства и watch persistence не срабатывали → stale состояние в UI и несохранение удалений.
+- **State (BR-02):** `bleStore.hydrate()` — добавлен `triggerRef(devices)`. Ранее после загрузки из IndexedDB computed-свойства `sortedDevices/deviceCount/airtagCount` не обновлялись → пустой список BLE при первой загрузке.
+- **State (BR-04):** `clearlist -a` — side effects расширены на `bleStore.clearDevices()`, `probeStore.clearProbes()`, `dashboardStore.resetStats()`. Ранее после очистки AP список BLE/probes/dashboard-счётчики оставались stale → UI показывал противоречивые данные.
+- **State (BR-08):** `clearListAndScan()` — добавлен `dashStore.resetStats()`. Ранее счётчики пакетов аккумулировались между сессиями сканирования.
 
 **MEDIUM:**
 - **CSP:** Добавлен заголовок Content-Security-Policy в index.html
 - **Parsers:** Добавлены недостающие регулярные выражения для 14 форматов
 - **State:** Добавлен единый `resetAllStores()`
+- **State (BR-07):** `parserEngine.startParser()` — 30s cleanup interval расширен на BLE (`removeOldDevices`) и probes (`removeOldProbes`). Добавлены методы `removeOldDevices()` (bleStore) и `removeOldProbes()` (probeStore).
 
 **LOW:**
 - **Throttle:** Увеличен throttle с 32ms до 16ms для более плавного UI
@@ -495,4 +523,4 @@ MIT License. Подробнее см. [LICENSE](LICENSE).
 
 ---
 
-*Документация обновлена 9 июня 2026, версия 0.7.5*
+*Документация обновлена 10 июня 2026, версия 0.7.5.2*

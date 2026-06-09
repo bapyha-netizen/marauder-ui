@@ -11,6 +11,7 @@ interface ReconnectDeps {
   lastConnectedPortInfo: { value: { usbVendorId?: number; usbProductId?: number } | null }
   connect: (port?: SerialPort | null) => Promise<boolean>
   addToTerminal: (text: string, type?: string) => void
+  onDisconnect?: () => void
 }
 
 interface NavigatorListeners {
@@ -68,15 +69,11 @@ export function createReconnectManager(deps: ReconnectDeps) {
       }
     }
     const discHandler = () => {
-      // Q-08: defensive guard — disconnect events can fire when the page is
-      // backgrounded or the navigator is mid-shutdown, even though we
-      // already called uninstallListeners. No-op if the manager was torn
-      // down (autoReconnect disabled, etc.) to avoid scheduling a reconnect
-      // from a half-disposed state.
       if (!deps.autoReconnect.value) return
       if (deps.isConnected.value) {
         deps.addToTerminal('Device unplugged', 'warning')
         deps.isConnected.value = false
+        deps.onDisconnect?.()
         schedule()
       }
     }

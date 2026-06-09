@@ -6,18 +6,15 @@ const _HTML_TAGS = /<[^>]*>/g
 const _HTML_ENTITIES = /&[a-zA-Z0-9#]+;/g
 const _JS_PROTOCOL = /javascript:/gi
 const _DATA_PROTOCOL = /data:/gi
-const _ALLOWED_HTML = /<(\/?)(span|b|i|u|br)(\s+style="[^"]*")?\s*\/?>/gi
-const _DANGEROUS_ATTR = /\s*on\w+\s*=\s*["'][^"']*["']/gi
 
-export function sanitizeText(value: unknown, opts: { maxLength?: number; html?: boolean } = {}): string {
-  const { maxLength = 4096, html = false } = opts
+export function sanitizeText(value: unknown, opts: { maxLength?: number } = {}): string {
+  const { maxLength = 4096 } = opts
   if (value == null) return ''
   const raw = String(value)
   if (!raw) return ''
   
   let sanitized = raw
   
-  // First, remove control characters and ANSI codes
   sanitized = sanitized
     .replace(_ANSI, '')
     .replace(_CTRL, '')
@@ -27,27 +24,12 @@ export function sanitizeText(value: unknown, opts: { maxLength?: number; html?: 
     .replace(/\u00A0/g, ' ')
     .trim()
   
-  // Security: Remove event handlers first (always)
-  sanitized = sanitized.replace(_DANGEROUS_ATTR, '')
-
-  if (!html) {
-    // If HTML is not allowed, strip all HTML tags and entities
-    sanitized = sanitized
-      .replace(_HTML_TAGS, '')
-      .replace(_HTML_ENTITIES, '')
-    
-    // Remove potentially dangerous protocols
-    sanitized = sanitized
-      .replace(_JS_PROTOCOL, '')
-      .replace(_DATA_PROTOCOL, '')
-  } else {
-    // Whitelist-safe HTML mode: strip everything except known-safe tags
-    sanitized = sanitized
-      .replace(_HTML_TAGS, (match) => /^<\/?(span|b|i|u|br)(\s+style="[^"]*")?\s*>$/i.test(match) ? match : '')
-      .replace(_HTML_ENTITIES, '')
-  }
+  sanitized = sanitized
+    .replace(_HTML_TAGS, '')
+    .replace(_HTML_ENTITIES, '')
+    .replace(_JS_PROTOCOL, '')
+    .replace(_DATA_PROTOCOL, '')
   
-  // Apply length limit after sanitization
   return sanitized.slice(0, maxLength)
 }
 

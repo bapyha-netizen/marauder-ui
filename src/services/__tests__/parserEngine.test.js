@@ -265,9 +265,9 @@ describe('parseLine — ESP32 Marauder output parser', () => {
       expect(ap.rssi).toBe(-75)
     })
 
-    it('ignores unknown SSID', () => {
+    it('creates temporary AP for unknown SSID', () => {
       parseLine('UnknownNet RSSI: -80')
-      expect(dashStore.events.filter(e => e.type === 'signal').length).toBe(0)
+      expect(dashStore.events.filter(e => e.type === 'signal').length).toBe(1)
     })
   })
 

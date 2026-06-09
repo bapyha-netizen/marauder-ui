@@ -1,5 +1,6 @@
 import { useApStore } from '../stores/apStore'
 import { useBleStore } from '../stores/bleStore'
+import { useProbeStore } from '../stores/probeStore'
 import { useDashboardStore } from '../stores/dashboardStore'
 import { marauderV1 } from './firmwareProfiles/marauderV1'
 import type { ParserContext, FirmwareProfile } from '../types/parser'
@@ -74,6 +75,8 @@ export function startParser(): void {
     intervalId = setInterval(() => {
       try {
         useApStore().removeOldAPs(AP_MAX_AGE)
+        useBleStore().removeOldDevices(AP_MAX_AGE)
+        useProbeStore().removeOldProbes(AP_MAX_AGE)
       } catch (_) { /* ignore */ }
     }, CLEANUP_INTERVAL)
   } finally {

@@ -168,6 +168,7 @@ const cachedResults = ref(null)
 const durationTick = ref(0)
 let _durationInterval = null
 let _abortController = null
+let _onSerialAbort = null
 
 onBeforeUnmount(() => {
   if (_abortController) { _abortController.abort(); _abortController = null }
@@ -261,6 +262,7 @@ const closeWorkflow = () => {
   selectedWorkflow.value = null
   cachedResults.value = null
   if (_durationInterval) { clearInterval(_durationInterval); _durationInterval = null }
+  try { if (_onSerialAbort) serialStore.getWorkflowSignal().removeEventListener('abort', _onSerialAbort) } catch (_) {}
   if (serialStore.isConnected) {
     runAction({ cmd: 'stopscan', label: 'Stop (workflow)', icon: '⏹' }).catch(() => {})
   }
@@ -290,6 +292,11 @@ const executeWorkflow = async () => {
   const wf = selectedWorkflow.value
   if (!wf) return
   _abortController = new AbortController()
+  const serialSignal = serialStore.getWorkflowSignal()
+  _onSerialAbort = () => _abortController?.abort()
+  if (!serialSignal.aborted) {
+    serialSignal.addEventListener('abort', _onSerialAbort, { once: true })
+  }
   const signal = _abortController.signal
   isRunning.value = true
   completed.value = false
@@ -350,7 +357,7 @@ const executeWorkflow = async () => {
           const idx = indices[j]
           const subCmd = cmd.replaceAll('{idx}', idx)
           try {
-            await serialStore.sendAndWait(subCmd, 2000, signal)
+            await runAction({ cmd: subCmd, label: subCmd, icon: '⚡', options: { signal } })
             dashStore.incrementCommands()
             addLog(`[${j + 1}/${Math.min(total, limit)}] idx ${idx}: ${subCmd}`, '⚡', 'text-yellow-400')
           } catch (e) {
@@ -399,7 +406,7 @@ const executeWorkflow = async () => {
             if (aborted.value) break
             const subCmd = cmd.replaceAll('{input}', item)
             try {
-              await serialStore.sendAndWait(subCmd, 5000, signal)
+              await runAction({ cmd: subCmd, label: subCmd, icon: '⚡', options: { signal } })
               dashStore.incrementCommands()
               addLog(t('workflows.sent', { cmd: subCmd }), '⚡', 'text-yellow-400')
             } catch (e) {
@@ -421,7 +428,7 @@ const executeWorkflow = async () => {
       }
 
       try {
-        await serialStore.sendAndWait(cmd, step.delay ? step.delay + 5000 : 15000, signal)
+        await runAction({ cmd, label: step.desc || cmd, icon: '⚡', options: { signal } })
         dashStore.incrementCommands()
         addLog(t('workflows.sent', { cmd }), '⚡', 'text-yellow-400')
         if (step.delay && !step.stopManual) {

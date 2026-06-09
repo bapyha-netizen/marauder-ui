@@ -39,7 +39,7 @@
           <div v-for="(line, i) in visibleTerminalLines" :key="visibleStart + i"
             class="hover:bg-white/5 rounded px-1 -mx-1"
             :class="line.cls"
-            v-html="line.text"></div>
+            v-text="line.text"></div>
           <div :style="{ height: spacerBottom + 'px' }"></div>
           <div v-if="!serialStore.terminalOutput.length" class="text-slate-600 text-center py-8">
             <div class="text-2xl mb-2">⚡</div>

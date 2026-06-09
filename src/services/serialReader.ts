@@ -79,116 +79,43 @@ export function createSerialReader() {
     _active = true
     _bufferTrimLogged = false
     _onTrimNotice = options?.onTrimNotice ?? null
-    const txtDecoder = new TextDecoder()
-    let buffer = new Uint8Array(0)
-
-    const splitByNewline = (buf: Uint8Array): Uint8Array[] => {
-      const result: Uint8Array[] = []
-      let start = 0
-      
-      // Pre-allocate result array for better performance
-      const estimatedLines = Math.min(buf.length / 50, 100) // Average 50 chars per line
-      result.length = 0
-      
-      for (let i = 0; i < buf.length; i++) {
-        if (buf[i] === 0x0A) {
-          let end = i
-          if (end > start && buf[end - 1] === 0x0D) end--
-          
-          // Check for extremely long lines and trim them
-          const lineLength = end - start
-          if (lineLength > MAX_LINE_LENGTH) {
-            // Truncate extremely long lines to prevent memory issues
-            result.push(buf.slice(start, start + MAX_LINE_LENGTH))
-            metrics.inc('serialLinesTruncated', 1)
-          } else {
-            result.push(buf.slice(start, end))
-          }
-          
-          start = i + 1
-        }
-      }
-      
-      if (start < buf.length) {
-        const remainingLength = buf.length - start
-        if (remainingLength > MAX_LINE_LENGTH) {
-          result.push(buf.slice(start, start + MAX_LINE_LENGTH))
-          metrics.inc('serialLinesTruncated', 1)
-        } else {
-          result.push(buf.slice(start))
-        }
-      } else if (start === buf.length) {
-        result.push(new Uint8Array(0))
-      }
-      
-      return result
-    }
 
     _listenPromise = (async () => {
       _reader = port.readable!.getReader()
+      const streamDecoder = new TextDecoder('utf-8')
+      let textBuffer = ''
       try {
         while (_active) {
           const { value, done } = await _reader.read()
           if (done) break
           if (value) {
             metrics.inc('serialBytes', value.length)
-             const newBuffer = new Uint8Array(buffer.length + value.length)
-             newBuffer.set(buffer)
-             newBuffer.set(value, buffer.length)
-             buffer = newBuffer
+            textBuffer += streamDecoder.decode(value, { stream: true })
 
-              // Bounded growth: when buffer exceeds RAW_BUFFER_MAX, copy down
-              // to a UTF-8 safe boundary at RAW_BUFFER_TRIM_TO. This is O(N)
-              // (Uint8Array copy) but N is bounded (64KB), so it is acceptable
-              // for a single read iteration. The buffer is intentionally kept
-              // small to bound worst-case memory.
-              if (buffer.length > RAW_BUFFER_MAX) {
-                const oldLength = buffer.length
-                const trimEnd = findLastUtf8Boundary(buffer, RAW_BUFFER_TRIM_TO)
-                buffer = buffer.slice(0, trimEnd)
-                metrics.inc('serialBufferTrimmed', 1)
-                
-                // Check if we potentially lost data during trimming
-                if (oldLength > RAW_BUFFER_TRIM_TO + 1000 && !_bufferTrimLogged) {
-                  _bufferTrimLogged = true
-                  _onTrimNotice?.(`Serial buffer overflow — trimmed ${oldLength - trimEnd} bytes, some lines may be lost`)
-                }
-              }
+            const lines = textBuffer.split('\n')
+            textBuffer = lines.pop() || ''
 
-            const lines = splitByNewline(buffer)
             let linesProcessed = 0
-            const linesToProcess = lines.length - 1
-            
-            // Process lines in batches for better performance
-            for (let i = 0; i < linesToProcess; i++) {
-              const lineData = lines[i]
-              
-              // Skip empty lines early
-              if (lineData.length === 0) continue
-              
+            for (const line of lines) {
+              const clean = line.replace(/\r$/, '').trim()
+              if (!clean) continue
+              if (clean.length > MAX_LINE_LENGTH) {
+                metrics.inc('serialLinesTruncated', 1)
+              }
               try {
-                // Use TextDecoder with streaming mode for better performance
-                const text = txtDecoder.decode(lineData)
-                const trimmed = text.trim()
-                
-                if (trimmed) {
-                  metrics.inc('serialLines', 1)
-                  sink(trimmed)
-                  linesProcessed++
-                }
+                metrics.inc('serialLines', 1)
+                sink(clean)
+                linesProcessed++
               } catch (e) {
-                // Skip lines that can't be decoded properly
                 metrics.inc('serialDecodeErrors', 1)
-                logger.warn('Failed to decode line', e, 'serialReader')
+                logger.warn('Failed to process line', e, 'serialReader')
               }
             }
-            
-            const lastLine = lines[linesToProcess]
-            buffer = lastLine ? new Uint8Array(lastLine) : new Uint8Array(0)
-            
-            // Log if we're losing lines due to buffer management (only occasionally to avoid spam)
-            if (linesToProcess > 10 && linesProcessed < linesToProcess - 2 && Math.random() < 0.1) {
-              logger.warn(`Serial reader: processed ${linesProcessed}/${linesToProcess} lines, potential data loss`, {}, 'serialReader')
+
+            if (textBuffer.length > RAW_BUFFER_MAX) {
+              _onTrimNotice?.(`Text buffer overflow — ${textBuffer.length} chars pending, clearing`)
+              textBuffer = textBuffer.slice(-RAW_BUFFER_TRIM_TO)
+              metrics.inc('serialBufferTrimmed', 1)
             }
           }
         }

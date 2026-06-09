@@ -103,6 +103,7 @@ import { getCommandMeta, SEVERITY_META, SEVERITY } from '../services/commandMeta
 import { runAction, getPrereqState, shouldConfirm } from '../utils/actionDispatcher'
 import { sanitizeText } from '../utils/sanitize'
 import { useCommandAction } from '../composables/useCommandAction'
+import { isCommandAllowed } from '../services/commandExecutor'
 import ConfirmDialog from './ConfirmDialog.vue'
 import { t, locale } from '../services/i18n'
 import { useToast } from '../utils/toast'
@@ -261,10 +262,20 @@ const onDialogCancelCustom = () => {
 }
 
 const sendCustom = () => {
-  if (custom.value.trim()) {
-    send({ command: custom.value.trim(), label: custom.value.trim(), icon: '⌨' })
+  if (!custom.value.trim()) return
+  const cmd = custom.value.trim()
+  if (!serialStore.isConnected) {
+    toastShow(t('commandBuilder.connectFirst'), 'warning')
     custom.value = ''
+    return
   }
+  if (!isCommandAllowed(cmd)) {
+    toastShow(`Command blocked: "${cmd}" is not in the allowlist`, 'error')
+    custom.value = ''
+    return
+  }
+  send({ command: cmd, label: cmd, icon: '⌨' })
+  custom.value = ''
 }
 
 const btnClass = (cmd) => {

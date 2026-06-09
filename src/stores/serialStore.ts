@@ -1,10 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref, shallowRef, triggerRef, type Ref } from 'vue'
 import { useApStore } from './apStore'
+import { useBleStore } from './bleStore'
+import { useProbeStore } from './probeStore'
+import { useDashboardStore } from './dashboardStore'
 import { parseDemoAP, parseDemoBLE, parseDemoPacketCounts, parseDemoChannelUtil, resetParserState, startParser, stopParser, resetCtxCache } from '../services/parserEngine'
 import { sanitizeText } from '../utils/sanitize'
 import { logger } from '../utils/logger'
 import { metrics } from '../utils/metrics'
+import { cancelPendingSaves } from '../utils/persist'
 import { createSerialReader, type SerialReader } from '../services/serialReader'
 import { createCommandExecutor, type CommandExecutor } from '../services/commandExecutor'
 import { createReconnectManager, type ReconnectManager } from '../services/serialReconnect'
@@ -38,6 +42,7 @@ export const useSerialStore = defineStore('serial', () => {
 
   const reader: SerialReader = createSerialReader()
   let _reconnect: ReconnectManager | null = null
+  const _workflowAbortController = ref<AbortController | null>(null)
 
   const getReconnect = (): ReconnectManager => _reconnect ?? _noopReconnect
 
@@ -55,7 +60,9 @@ export const useSerialStore = defineStore('serial', () => {
         _pendingLines = []
         _microtaskScheduled = false
         for (const h of _lineHandlers) {
-          for (const line of batch) h(line)
+          for (const line of batch) {
+            try { h(line) } catch (e) { logger.warn('Line handler error', e, 'serialStore') }
+          }
         }
       })
     }
@@ -86,7 +93,7 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   const addToTerminal = (text: string, type: TerminalLineType = 'normal'): void => {
-    const safe = sanitizeText(text, { maxLength: 8192, html: true })
+    const safe = sanitizeText(text, { maxLength: 8192 })
     if (!safe) return
     _notifyLine(safe)
     const safeType: TerminalLineType = _isTerminalLineType(type) ? type : 'normal'
@@ -189,10 +196,13 @@ export const useSerialStore = defineStore('serial', () => {
         onTrimNotice: (msg) => addToTerminal(msg, 'warning')
       })
     }
+    resetCtxCache()
     return true
   }
 
   const disconnect = async (): Promise<void> => {
+    _workflowAbortController.value?.abort()
+    _workflowAbortController.value = null
     getReconnect().cancel()
     getReconnect().uninstallListeners()
     await reader.stop()
@@ -206,6 +216,11 @@ export const useSerialStore = defineStore('serial', () => {
     stopParser()
     resetParserState()
     resetCtxCache()
+    _lineHandlers = []
+    _pendingLines = []
+    _microtaskScheduled = false
+    executor.cancelPending?.()
+    cancelPendingSaves()
     metrics.stop()
     terminalOutput.value = []
     addToTerminal('Disconnected', 'error')
@@ -223,21 +238,24 @@ export const useSerialStore = defineStore('serial', () => {
     }
   })
 
-  const _sendWithSideEffects = async (command: string): Promise<boolean> => {
-    const result = await executor.send(command)
-    if (result) {
-      if (command === 'clearlist -a') apStore.clearAPs()
-      else if (command === 'clearlist -c') apStore.clearSelected()
-    }
-    return result
+  const clearAllStores = (): void => {
+    apStore.clearAPs()
+    useBleStore().clearDevices()
+    useProbeStore().clearProbes()
+    useDashboardStore().resetStats()
   }
 
   let _isConnecting = false
+  let _connectTimeout: ReturnType<typeof setTimeout> | null = null
 
   const _connect = async (portArg: SerialPort | null = null): Promise<boolean> => {
     if (_isConnecting) return false
     _isConnecting = true
     getReconnect().cancel()
+    _connectTimeout = setTimeout(() => {
+      _isConnecting = false
+      _connectTimeout = null
+    }, 30000)
     try {
       return await _buildConnect(portArg)()
     } catch (e) {
@@ -246,6 +264,10 @@ export const useSerialStore = defineStore('serial', () => {
       getReconnect().schedule()
       throw e
     } finally {
+      if (_connectTimeout) {
+        clearTimeout(_connectTimeout)
+        _connectTimeout = null
+      }
       _isConnecting = false
     }
   }
@@ -257,41 +279,14 @@ export const useSerialStore = defineStore('serial', () => {
     reconnectAttempts,
     lastConnectedPortInfo,
     connect: _connect,
-    addToTerminal: addToTerminal as (text: string, type?: string) => void
+    addToTerminal: addToTerminal as (text: string, type?: string) => void,
+    onDisconnect: () => {
+      executor.cancelPending?.()
+      _lineHandlers = []
+      _pendingLines = []
+      _microtaskScheduled = false
+    }
   })
-
-  const scanAll = async (signal?: AbortSignal): Promise<void> => {
-    if (isDemoMode.value) {
-      addToTerminal('> scanall (demo)', 'command')
-      await new Promise<void>((r) => {
-        const timer = setTimeout(r, 1500)
-        signal?.addEventListener('abort', () => { clearTimeout(timer); r() }, { once: true })
-      })
-      parseDemoAP()
-      parseDemoBLE()
-      addToTerminal('> stopscan (demo)', 'command')
-      addToTerminal('> list -a (demo)', 'command')
-      return
-    }
-    await executor.sendSequence([
-      { command: 'scanall', delay: 6000 },
-      'stopscan',
-      { delay: 500 },
-      'list -a'
-    ], signal)
-  }
-
-  const clearListAndScan = async (signal?: AbortSignal): Promise<void> => {
-    const ok = await executor.send('clearlist -a')
-    if (!ok) {
-      addToTerminal('Clear list failed: device did not acknowledge', 'error')
-    }
-    await new Promise<void>((r) => {
-      const timer = setTimeout(r, 500)
-      signal?.addEventListener('abort', () => { clearTimeout(timer); r() }, { once: true })
-    })
-    await scanAll(signal)
-  }
 
   const clearOutput = (): void => {
     terminalOutput.value = []
@@ -311,21 +306,21 @@ export const useSerialStore = defineStore('serial', () => {
     scheduleTerminalUpdate()
   }
 
-  const _sendAndWaitWithSideEffects = async (command: string, timeout?: number, signal?: AbortSignal): Promise<void> => {
-    if (signal?.aborted) return
-    await executor.sendAndWait(command, timeout, signal)
-    if (command === 'clearlist -a') apStore.clearAPs()
-    else if (command === 'clearlist -c') apStore.clearSelected()
-  }
-
   return {
     port, isConnected, isDemoMode, terminalOutput,
     baudRate, autoReconnect, reconnectAttempts,
     connect: _connect, disconnect,
-    sendCommand: _sendWithSideEffects,
-    sendAndWait: _sendAndWaitWithSideEffects,
+    sendCommand: executor.send,
+    sendAndWait: executor.sendAndWait,
     sendSequence: executor.sendSequence,
     addToTerminal, clearOutput, toggleDemo, onLine, setTerminalOutput,
+    clearAllStores,
+    getWorkflowSignal: () => {
+      if (!_workflowAbortController.value) {
+        _workflowAbortController.value = new AbortController()
+      }
+      return _workflowAbortController.value.signal
+    },
     cancelReconnect: () => getReconnect().cancel(),
     scheduleReconnect: () => getReconnect().schedule()
   }

@@ -1,6 +1,36 @@
 import { sanitizeText } from '../utils/sanitize'
 import { META } from './firmwareProfiles/marauderV1'
 
+const ALLOWED_COMMANDS = new Set([
+  'scanall', 'sniffbeacon', 'sniffprobe', 'sniffdeauth', 'sniffpmkid',
+  'sniffraw', 'sniffsae', 'sniffpwn', 'sniffpinescan', 'sniffmultissid',
+  'stopscan', 'sniffbt', 'sniffskim',
+  'attack', 'blespam', 'spoofat',
+  'list', 'select', 'clearlist',
+  'ssid', 'save', 'load',
+  'randapmac', 'randstamac', 'cloneapmac', 'clonestamac',
+  'join', 'add', 'pingscan', 'arpscan', 'portscan',
+  'info', 'settings', 'channel', 'reboot',
+  'led', 'brightness', 'packetcount', 'sigmon',
+  'channelanalyzer', 'mactrack', 'gpsdata', 'nmea',
+  'gpspoi', 'gpstracker', 'wardrive', 'wardrivepoi',
+  'evilportal', 'karma', 'ls',
+  'update', 'help', 'reset', 'scan',
+  'deauth', 'beacon', 'probe', 'ble',
+  'stop', 'clear', 'show'
+])
+
+export function isCommandAllowed(command: string): boolean {
+  const cmd = command.trim().toLowerCase()
+  if (!cmd) return false
+  const firstToken = cmd.split(/\s+/)[0]
+  return ALLOWED_COMMANDS.has(firstToken)
+}
+
+export function getAllowedCommands(): Set<string> {
+  return new Set(ALLOWED_COMMANDS)
+}
+
 const DEFAULT_CMD_TIMEOUT_MS = 15000
 const SEQUENCE_STEP_TIMEOUT_MS = 5000
 const SEQUENCE_STEP_BUFFER_MS = 5000
@@ -29,27 +59,34 @@ export function createCommandExecutor(deps: ExecutorDeps) {
 
   let _writeQueue: QueuedCommand[] = []
   let _writing = false
+  let _cancelling = false
   let _lastCommandTime = 0
   const MIN_COMMAND_INTERVAL_MS = 100
   const MAX_QUEUE_SIZE = 100
+  let _sendAndWaitInProgress = false
+  const _sendAndWaitQueue: Array<{ command: string; timeout: number; signal?: AbortSignal; resolve: () => void }> = []
   const _pendingCommands = new Map()
 
   const clearQueue = (): void => {
+    _cancelling = true
     while (_writeQueue.length) {
       _writeQueue.shift()?.resolve(false)
     }
     _writing = false
+    _cancelling = false
   }
 
   const _processQueue = async (): Promise<void> => {
     if (_writing) return
     _writing = true
     while (_writeQueue.length > 0) {
+      if (_cancelling) { _cancelling = false; break }
       const item = _writeQueue.shift()!
       const sent = await _writeRaw(item.command)
       item.resolve(sent)
     }
     _writing = false
+    _cancelling = false
   }
 
   const _writeRaw = async (command: string): Promise<boolean> => {
@@ -91,6 +128,10 @@ export function createCommandExecutor(deps: ExecutorDeps) {
     if (!command) return false
     const cmd = sanitizeText(command, { maxLength: 512 })
     if (!cmd) return false
+    if (!isCommandAllowed(cmd)) {
+      deps.addToTerminal(`Command blocked: "${cmd}" is not in the allowlist`, 'error')
+      return false
+    }
 
     if (deps.isDemoMode.value) {
       deps.addToTerminal(`> ${cmd}`, 'command')
@@ -100,14 +141,9 @@ export function createCommandExecutor(deps: ExecutorDeps) {
     return _enqueueWrite(cmd)
   }
 
-  const sendAndWait = (command: string, timeout: number = DEFAULT_CMD_TIMEOUT_MS, signal?: AbortSignal): Promise<void> => {
+  const _doSendAndWait = (command: string, timeout: number, signal?: AbortSignal): Promise<void> => {
     return new Promise((resolve) => {
       if (signal?.aborted) { resolve(); return }
-      if (deps.isDemoMode.value || !deps.port.value) {
-        _send(command)
-        setTimeout(resolve, Math.min(timeout, 500))
-        return
-      }
       const echo = `> ${command}`
       let resolved = false
       const unsub = deps.onLine((line: string) => {
@@ -139,6 +175,7 @@ export function createCommandExecutor(deps: ExecutorDeps) {
         unsub()
         signal?.removeEventListener('abort', onAbort)
       }
+      if (signal?.aborted) { resolve(); return }
       _send(command).then(sent => {
         if (!sent && !resolved) {
           resolved = true
@@ -146,6 +183,31 @@ export function createCommandExecutor(deps: ExecutorDeps) {
           resolve()
         }
       })
+    })
+  }
+
+  const _processSendAndWaitQueue = async (): Promise<void> => {
+    if (_sendAndWaitInProgress) return
+    _sendAndWaitInProgress = true
+    while (_sendAndWaitQueue.length > 0) {
+      const item = _sendAndWaitQueue.shift()!
+      if (deps.isDemoMode.value || !deps.port.value) {
+        _send(item.command)
+        await new Promise(r => setTimeout(r, Math.min(item.timeout, 500)))
+        item.resolve()
+      } else {
+        await _doSendAndWait(item.command, item.timeout, item.signal)
+        item.resolve()
+      }
+    }
+    _sendAndWaitInProgress = false
+  }
+
+  const sendAndWait = (command: string, timeout: number = DEFAULT_CMD_TIMEOUT_MS, signal?: AbortSignal): Promise<void> => {
+    return new Promise((resolve) => {
+      if (signal?.aborted) { resolve(); return }
+      _sendAndWaitQueue.push({ command, timeout, signal, resolve })
+      _processSendAndWaitQueue()
     })
   }
 
@@ -169,7 +231,19 @@ export function createCommandExecutor(deps: ExecutorDeps) {
     }
   }
 
-  return { send: _send, sendAndWait, sendSequence }
+  const cancelPending = (): void => {
+    for (const [, pending] of _pendingCommands) {
+      pending.reject(new Error('Cancelled'))
+    }
+    _pendingCommands.clear()
+    while (_sendAndWaitQueue.length > 0) {
+      _sendAndWaitQueue.shift()!.resolve()
+    }
+    _sendAndWaitInProgress = false
+    clearQueue()
+  }
+
+  return { send: _send, sendAndWait, sendSequence, clearQueue, cancelPending }
 }
 
 export type CommandExecutor = ReturnType<typeof createCommandExecutor>

@@ -43,7 +43,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   function addEvent(type: string, data: string) {
-    data = sanitizeText(data, { maxLength: 512, html: true })
+    data = sanitizeText(data, { maxLength: 512 })
     const next = [{ type, data, time: new Date() }, ...events.value]
     if (next.length > 200) next.length = 200
     events.value = next
@@ -70,14 +70,14 @@ export const useDashboardStore = defineStore('dashboard', () => {
   function setIPList(list: IPListEntry[]) {
     ipList.value = list.map((entry) => ({
       ...entry,
-      ip: sanitizeText(entry.ip, { maxLength: 40, html: true }),
-      mac: sanitizeText(entry.mac, { maxLength: 18, html: true })
+      ip: sanitizeText(entry.ip, { maxLength: 40 }),
+      mac: sanitizeText(entry.mac, { maxLength: 18 })
     }))
   }
 
   function setLastStationAP(index: number, name: string) {
     lastStationAPIndex.value = index
-    lastStationAPName.value = sanitizeText(name, { maxLength: 64, html: true })
+    lastStationAPName.value = sanitizeText(name, { maxLength: 64 })
   }
 
   function resetStats() {

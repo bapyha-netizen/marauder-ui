@@ -24,8 +24,8 @@ export const useProbeStore = defineStore('probe', () => {
   })
 
   function addProbe(rssi: number, ch: number, clientMac: string, ssid: string) {
-    clientMac = sanitizeText(clientMac, { maxLength: 18, html: true })
-    ssid = sanitizeText(ssid, { maxLength: 64, html: true })
+    clientMac = sanitizeText(clientMac, { maxLength: 18 })
+    ssid = sanitizeText(ssid, { maxLength: 64 })
     const next = [{ rssi, ch, clientMac: clientMac.toUpperCase(), ssid, time: new Date() }, ...probes.value]
     if (next.length > 500) next.length = 500
     probes.value = next
@@ -79,5 +79,14 @@ export const useProbeStore = defineStore('probe', () => {
     triggerRef(probes)
   }
 
-  return { probes, probeCount, uniqueClients, addProbe, clearProbes, hydrate }
+  function removeOldProbes(maxAgeMs = 300000) {
+    const now = Date.now()
+    const filtered = probes.value.filter(p => now - new Date(p.time).getTime() <= maxAgeMs)
+    if (filtered.length !== probes.value.length) {
+      probes.value = filtered
+      triggerRef(probes)
+    }
+  }
+
+  return { probes, probeCount, uniqueClients, addProbe, clearProbes, hydrate, removeOldProbes }
 })

@@ -2,6 +2,8 @@ import { ref, shallowRef, computed } from 'vue'
 import { getCommandMeta, SEVERITY, SEVERITY_META, type SeverityValue } from '../services/commandMeta'
 import { useApStore } from '../stores/apStore'
 import { useBleStore } from '../stores/bleStore'
+import { useProbeStore } from '../stores/probeStore'
+import { useDashboardStore } from '../stores/dashboardStore'
 import { sanitizeText } from './sanitize'
 
 type CommandMetaEntry = NonNullable<ReturnType<typeof getCommandMeta>>
@@ -56,6 +58,7 @@ class ActionDispatcher {
   private _nextId = 0
   private _runningAction = ref<Action | null>(null)
   private _listeners = new Set<() => void>()
+  private _executing = false
 
   readonly actions = computed(() => this._actions.value)
   readonly runningAction = computed(() => this._runningAction.value)
@@ -117,6 +120,8 @@ class ActionDispatcher {
   }
 
   async _execute({ cmd, label, icon, target, meta, signal }: { cmd: string; label?: string; icon?: string; target?: string | null; meta?: CommandMetaEntry; signal?: AbortSignal }) {
+    if (this._executing) return { ok: false, action: null }
+    this._executing = true
     const { useSerialStore } = await import('../stores/serialStore')
     const serialStore = useSerialStore()
     const metaSeverity: string = String(meta?.severity) || SEVERITY.INFO
@@ -153,9 +158,18 @@ class ActionDispatcher {
           signal?.addEventListener('abort', () => { clearTimeout(timer); r() }, { once: true })
         })
       }
+      const trimCmd = cmd.trim().toLowerCase()
+      if (trimCmd === 'clearlist -a') {
+        useApStore().clearAPs()
+        useBleStore().clearDevices()
+        useProbeStore().clearProbes()
+        useDashboardStore().resetStats()
+      } else if (trimCmd === 'clearlist -c') {
+        useApStore().clearSelected()
+      }
       const collected: string[] = []
       for (let i = startLen; i < serialStore.terminalOutput.length; i++) {
-        collected.push(sanitizeText(this._safeTerminalLine(serialStore.terminalOutput[i]), { html: true }))
+        collected.push(sanitizeText(this._safeTerminalLine(serialStore.terminalOutput[i])))
       }
       const output = collected.join('\n').trim()
       action.result = output || 'OK (no output)'
@@ -171,6 +185,7 @@ class ActionDispatcher {
       action.status = 'error'
       action.result = e instanceof Error ? e.message : String(e)
     } finally {
+      this._executing = false
       this._setRunningAction(null)
       setTimeout(() => {
         if (action.status === 'running') return
@@ -181,7 +196,7 @@ class ActionDispatcher {
         }
       }, ACTION_RETENTION_MS)
     }
-    return { ok: action.status === 'ok', action }
+    return { ok: action.status === 'ok', action: action.status === 'ok' ? action : null }
   }
 }
 

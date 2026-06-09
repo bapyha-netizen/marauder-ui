@@ -253,10 +253,10 @@ export const useApStore = defineStore('ap', () => {
   }
 
   function updateOrAddAP(ap: Partial<APOpaque>) {
-    if (ap.essid) ap.essid = sanitizeText(ap.essid, { maxLength: 64, html: true })
-    if (ap.bssid) ap.bssid = sanitizeText(ap.bssid, { maxLength: 18, html: true })
-    if (ap.vendor) ap.vendor = sanitizeText(ap.vendor, { maxLength: 64, html: true })
-    if (ap.encryption) ap.encryption = sanitizeText(ap.encryption, { maxLength: 16, html: true })
+    if (ap.essid) ap.essid = sanitizeText(ap.essid, { maxLength: 64 })
+    if (ap.bssid) ap.bssid = sanitizeText(ap.bssid, { maxLength: 18 })
+    if (ap.vendor) ap.vendor = sanitizeText(ap.vendor, { maxLength: 64 })
+    if (ap.encryption) ap.encryption = sanitizeText(ap.encryption, { maxLength: 16 })
     const existingKey = _findExisting(ap)
     const existing = existingKey ? accessPoints.value.get(existingKey) : null
     const newKey = ap.bssid ? ap.bssid.toUpperCase()
@@ -407,7 +407,8 @@ export const useApStore = defineStore('ap', () => {
       }
     }
     if (changed) {
-      // Sorted APs are computed, no need to manually update
+      _recomputeStats()
+      triggerRef(accessPoints)
     }
   }
 
@@ -488,7 +489,7 @@ export const useApStore = defineStore('ap', () => {
       // D-03: Validate and fix any orphaned indexes after hydration
       const fixedCount = _validateAndFixIndexes()
       if (fixedCount > 0) {
-        console.log(`Fixed ${fixedCount} orphaned indexes during hydration`)
+        // orphaned indexes fixed silently
       }
       _recomputeStats()
       triggerRef(accessPoints)

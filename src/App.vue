@@ -242,7 +242,7 @@ const processTerminalOutput = () => {
     }
     lastLength = lines.length
     _terminalThrottleTimer = null
-  }, 32) // ~30 FPS limit for terminal processing
+  }, 16) // ~60 FPS limit for terminal processing
 }
 
 const _onUnhandledRejection = (event) => {
@@ -329,6 +329,10 @@ const handleEmergencyStop = () => {
 }
 
 const toggleDemoMode = async () => {
+  if (serialStore.isConnected) {
+    toastShow('Disconnect real device first', 'error')
+    return
+  }
   serialStore.toggleDemo()
   if (serialStore.isDemoMode) {
     lastLength = 0

@@ -59,10 +59,9 @@ function parseAPList(line: string, ctx: ParserContext): boolean {
     essid = essid.replace(/\s*-?\d+$/, '').trim()
   }
   const parsedIndex = safeInt(index)
-const apData = {
+  const apData = {
     index: parseInt(m[1]),
     channel: parseInt(m[2]),
-    bssid: m[3],
     essid: essid || '(hidden)',
     rssi,
     lastSeen: new Date(),
@@ -228,8 +227,9 @@ function parseSignalMonitor(line: string, ctx: ParserContext): boolean {
   const m = line.match(re)
   if (!m) return false
   const [, essid, rssi] = m
+  const trimmedEssid = essid.trim()
   for (const [, ap] of ctx.apStore.accessPoints) {
-    if (ap.essid === essid.trim()) {
+    if (ap.essid === trimmedEssid) {
       ctx.apStore.updateOrAddAP({
         ...ap,
         rssi: safeInt(rssi),
@@ -239,7 +239,15 @@ function parseSignalMonitor(line: string, ctx: ParserContext): boolean {
       return true
     }
   }
-  return false
+  ctx.apStore.updateOrAddAP({
+    essid: trimmedEssid,
+    rssi: safeInt(rssi),
+    lastSeen: new Date(),
+    isHidden: false,
+    bssid: ''
+  })
+  ctx.dashStore.addEvent('signal', line)
+  return true
 }
 
 function parsePacketCount(line: string, ctx: ParserContext): boolean {
@@ -314,9 +322,17 @@ function parseAPInfo(line: string, ctx: ParserContext): boolean {
   const essidM = line.match(essidRe)
   if (essidM) { ctx.apStore.updateAP(ctx.infoAPIndex, { essid: essidM[1].trim() }); return true }
 
-  if (AP_INFO_LAST_SEEN_RE.test(line)) return true
+  const lastSeenM = line.match(AP_INFO_LAST_SEEN_RE)
+  if (lastSeenM) {
+    ctx.dashStore.addEvent('apInfo', `${ctx.infoAPIndex}: last seen ${lastSeenM[1].trim()}`)
+    return true
+  }
 
-  if (AP_INFO_STATIONS_RE.test(line)) return true
+  const stationsM = line.match(AP_INFO_STATIONS_RE)
+  if (stationsM) {
+    ctx.dashStore.addEvent('apInfo', `${ctx.infoAPIndex}: stations ${stationsM[1]}`)
+    return true
+  }
 
   ctx.infoAPIndex = -1
   return false
@@ -332,6 +348,10 @@ function parseIPList(line: string, ctx: ParserContext): boolean {
   if (!m) return false
   const [, idx, ip] = m
   const macMatch = line.match(MAC_RE)
+  const ipLike = /^(?:\d{1,3}\.){3}\d{1,3}$/.test(ip)
+  if (!macMatch && !ipLike) {
+    return false
+  }
   ctx.ipListBuffer.push({
     index: safeInt(idx) ?? 0,
     ip,
